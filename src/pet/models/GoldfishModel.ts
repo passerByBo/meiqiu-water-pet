@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose } from '../BlackCatModel';
-import { Blinker, createBeadEye, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
+import { Blinker, createAnimeEye, EYE_PALETTES, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
 const COLORS = {
   body: 0x1b1b25,       // 黑色身子
@@ -151,25 +151,10 @@ export class GoldfishModel implements PetModel {
     this.fish.scale.setScalar(1.12);
     this.bodyMesh = builder.ellipsoid(bodyMaterial, .34, .35, .44, 0, 0, -.1);
     this.fish.add(this.bodyMesh);
-    this.fish.add(builder.ellipsoid(headMaterial, .33, .335, .12, 0, 0, .1, false));   // 头后面的一圈白色
+    // 头后面的白色：一层贴着身子的白"皮"，后边缘是一条不规则的波浪线——
+    // 有的地方白色往后伸进黑色身子，有的地方黑色往前咬进白色，黑白互相交错（像真的熊猫金鱼那样）
+    this.fish.add(this.createWhiteCollar(headMaterial));
     this.addScales();
-    // 黑白分界不规则：几块大小不一的白色花斑从白圈伸进黑色身子（像真的熊猫金鱼那样），不加描边，和白圈连成一片
-    const patchDirections: [number, number, number, number][] = [   // [绕身子的角度, 离白圈多远, 宽, 长]
-      [70, -.02, .12, .1], [115, .01, .1, .12], [160, -.03, .13, .09], [-60, -.01, .11, .1], [-110, -.04, .13, .09],
-      [-155, .01, .09, .11], [20, -.03, .09, .08], [-20, .01, .1, .07],
-    ];
-    const bodyRadii = new THREE.Vector3(.34, .35, .44);
-    for (const [angleDegrees, alongOffset, width, length] of patchDirections) {
-      const angle = THREE.MathUtils.degToRad(angleDegrees);
-      const alongBody = .1 + alongOffset;   // 白圈的位置在身子坐标里大约 z = .1 + .1
-      const ring = Math.sqrt(Math.max(0, 1 - (alongBody / bodyRadii.z) ** 2));
-      const local = new THREE.Vector3(bodyRadii.x * ring * Math.cos(angle), bodyRadii.y * ring * Math.sin(angle), alongBody);
-      const normal = new THREE.Vector3(local.x / bodyRadii.x ** 2, local.y / bodyRadii.y ** 2, local.z / bodyRadii.z ** 2).normalize();
-      const patch = builder.ellipsoid(headMaterial, width, length, .03, 0, 0, 0, false);
-      patch.position.copy(local).add(new THREE.Vector3(0, 0, -.1)).addScaledVector(normal, -.012);
-      patch.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-      this.fish.add(patch);
-    }
     const headCenter = new THREE.Vector3(0, .02, .25);
     const headRadii = new THREE.Vector3(.3, .29, .28);
     this.fish.add(builder.ellipsoid(headMaterial, headRadii.x, headRadii.y, headRadii.z, headCenter.x, headCenter.y, headCenter.z));
@@ -189,7 +174,7 @@ export class GoldfishModel implements PetModel {
 
     // 圆溜溜的大眼睛：朝前、带高光，正面看是一副乖巧的样子
     for (const side of [-1, 1]) {
-      const eye = createBeadEye(builder, .082, side);
+      const eye = createAnimeEye(builder, .082, side, EYE_PALETTES.goldfish);
       eye.group.position.set(side * .15, .06, .492);
       eye.group.rotation.set(-.05, side * .42, 0);
       this.fish.add(eye.group);
@@ -258,6 +243,48 @@ export class GoldfishModel implements PetModel {
   }
 
   /**
+   * 头后面那一圈白色：在身子椭球表面上铺一层网格（比身子大一丁点），从头部一直铺到一条不规则的分界线。
+   * 分界线 = 几个不同频率的波浪叠在一起，绕身子一圈高低起伏，看起来是自然的、不规则的黑白交界
+   */
+  private createWhiteCollar(material: THREE.MeshToonMaterial): THREE.Mesh {
+    const aroundSegments = 96, alongSegments = 12;
+    const bodyCenter = new THREE.Vector3(0, 0, -.1);
+    const bodyRadii = new THREE.Vector3(.34, .35, .44);
+    const frontEdge = .42;                           // 往前一直铺到头里面（被头挡住）
+    // 分界线的位置（身子坐标里的 z）：基础位置 + 三个不同频率的波浪
+    const boundaryAt = (angle: number) => .12 + .055 * Math.sin(3 * angle + .6) + .035 * Math.sin(5 * angle + 1.9) + .02 * Math.sin(9 * angle + .3);
+    const positions: number[] = [];
+    const indices: number[] = [];
+    for (let column = 0; column <= aroundSegments; column++) {
+      const angle = column / aroundSegments * Math.PI * 2;
+      const boundary = boundaryAt(angle);
+      for (let row = 0; row <= alongSegments; row++) {
+        const alongBody = boundary + (frontEdge - boundary) * row / alongSegments;
+        // 比身子大 3.5%：身子"呼吸"时会胀大 2%，白皮要始终盖在外面
+        const ring = Math.sqrt(Math.max(0, 1 - (alongBody / bodyRadii.z) ** 2)) * 1.035;
+        positions.push(bodyCenter.x + bodyRadii.x * ring * Math.cos(angle), bodyCenter.y + bodyRadii.y * ring * Math.sin(angle), bodyCenter.z + alongBody);
+      }
+    }
+    for (let column = 0; column < aroundSegments; column++) {
+      for (let row = 0; row < alongSegments; row++) {
+        const corner = column * (alongSegments + 1) + row;
+        const next = corner + alongSegments + 1;
+        indices.push(corner, corner + 1, next, corner + 1, next + 1, next);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const doubleSided = material.clone();
+    doubleSided.side = THREE.DoubleSide;
+    doubleSided.onBeforeCompile = material.onBeforeCompile;   // 保留轮廓光
+    const collar = new THREE.Mesh(geometry, doubleSided);
+    collar.raycast = () => {};
+    return collar;
+  }
+
+  /**
    * 鳞片：像瓦片一样一片压一片——靠近头的一排压在后一排上面。
    * 每片是一个很薄、微微鼓起的圆片，排得比自己的直径还密（前后左右都互相重叠一半左右），
    * 并且后边缘往外翘一点，所以前一排的后边缘正好盖住后一排的前半片；只长在白圈后面的黑色身子两侧
@@ -268,7 +295,7 @@ export class GoldfishModel implements PetModel {
     const bodyCenter = new THREE.Vector3(0, 0, -.1);
     const bodyRadii = new THREE.Vector3(.34, .35, .44);
     const outward = new THREE.Vector3(0, 0, 1);
-    const rowPositions = [0, -.085, -.17, -.255];        // 从头往尾巴，每排间隔比鳞片小（前后重叠）
+    const rowPositions = [-.07, -.15, -.23, -.31];      // 从头往尾巴，每排间隔比鳞片小（前后重叠）；第一排在黑白分界后面
     for (const side of [-1, 1]) {
       for (const [rowIndex, alongBody] of rowPositions.entries()) {
         const stagger = rowIndex % 2 === 0 ? 0 : 13;     // 一排一排错开半片
@@ -375,7 +402,7 @@ export class GoldfishModel implements PetModel {
       bubble.mesh.scale.setScalar(.025 + progress * .03);
     }
 
-    updateEyes(this.eyes, pose, this.blinker.update(deltaSeconds), .015);
+    updateEyes(this.eyes, pose, this.blinker.update(deltaSeconds), .015, elapsedSeconds);
 
     this.sign.update(pose.holdSign, elapsedSeconds);
     // 影子：鱼离地越高影子越淡

@@ -1,11 +1,11 @@
 // 3D 仓鼠"团子"（参考 demo/仓鼠.png）：奶黄色的背、白肚皮白脸颊、圆滚滚的饭团身材、
-// 小圆耳朵（内侧粉色）、黑豆豆大眼睛、粉鼻子、两颗小门牙、粉色小爪子抱在胸前、几乎看不到的小尾巴。
+// 小圆耳朵（内侧粉色）、咖啡红色亮晶晶的大眼睛、粉鼻子、两颗小门牙、粉色小爪子抱在胸前、几乎看不到的小尾巴。
 // 没有脖子，头和身子连在一起；平时直立坐着（像参考图），走路时趴下四条腿小碎步。
 // 特有动作 special：把腮帮子塞得鼓鼓的
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose } from '../BlackCatModel';
-import { Blinker, createBeadEye, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
+import { Blinker, createAnimeEye, EYE_PALETTES, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
 const COLORS = {
   cream: 0xecbf86,      // 奶黄色的毛（参考图里偏金黄的奶油色）
@@ -108,9 +108,9 @@ export class HamsterModel implements PetModel {
     this.blushMaterial = builder.decal(createCanvasTexture(drawBlush, 64));
     this.blushMaterial.opacity = .4;
     for (const side of [-1, 1]) this.head.add(builder.sticker(this.blushMaterial, .075, .042, side * .24, -.07, .33, side * .6));
-    // 黑豆豆大眼睛（参考图里眼睛又大又亮）
+    // 亮晶晶的大眼睛（深咖啡红，像黑葡萄；参考图里眼睛又大又亮）
     for (const side of [-1, 1]) {
-      const eye = createBeadEye(builder, .088, side);
+      const eye = createAnimeEye(builder, .1, side, EYE_PALETTES.hamster);
       eye.group.position.set(side * .165, .05, .343);
       eye.group.rotation.set(-.05, side * .45, 0);
       this.head.add(eye.group);
@@ -259,7 +259,7 @@ export class HamsterModel implements PetModel {
     }
 
     // ---- 眼睛、耳朵、嘴巴 ----
-    updateEyes(this.eyes, pose, this.blinker.update(deltaSeconds), .02);
+    updateEyes(this.eyes, pose, this.blinker.update(deltaSeconds), .02, elapsedSeconds);
     this.blushMaterial.opacity = .35 + .5 * Math.max(pose.squint, pose.bounce, pose.special);
     for (const ear of this.ears) {
       ear.group.rotation.set(-pose.earBack * .8 + pose.earPerk * .15, 0, ear.side * -(.35 + pose.earBack * .5));
