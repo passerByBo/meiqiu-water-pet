@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>煤球 · 桌面喝水黑猫 — 功能设计文档</title>
+<style>
+  :root {
+    --cat-body: #1a1a1a;
+    --cat-eye: #c8e64a;
+    --cat-pink: #ffb3c1;
+    --water: #6ec6ff;
+    --page-bg: #f6f5f2;
+    --card-bg: #ffffff;
+    --text-main: #2b2b2b;
+    --text-sub: #6b6b6b;
+    --accent: #3a7bd5;
+    --border: #e5e2dc;
+    --tag-p0: #e8574a;
+    --tag-p1: #e8a23a;
+    --tag-p2: #6aa84f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    background: var(--page-bg);
+    color: var(--text-main);
+    line-height: 1.7;
+  }
+  header {
+    background: linear-gradient(135deg, #1f1f24 0%, #2d2d38 100%);
+    color: #fff;
+    padding: 48px 24px 40px;
+    text-align: center;
+  }
+  header h1 { margin: 0 0 8px; font-size: 34px; letter-spacing: 2px; }
+  header p { margin: 0; color: #c9c9d4; }
+  header .meta { margin-top: 14px; font-size: 13px; color: #9a9aa8; }
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center;
+    font-size: 14px;
+  }
+  nav a { color: var(--text-sub); text-decoration: none; }
+  nav a:hover { color: var(--accent); }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
+  section {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin: 24px 0;
+  }
+  h2 { margin-top: 0; font-size: 22px; border-left: 5px solid var(--cat-body); padding-left: 12px; }
+  h3 { font-size: 17px; margin: 22px 0 8px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #faf9f7; white-space: nowrap; }
+  code { background: #f1efeb; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  .tag { display: inline-block; padding: 0 8px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: bold; }
+  .tag.p0 { background: var(--tag-p0); }
+  .tag.p1 { background: var(--tag-p1); }
+  .tag.p2 { background: var(--tag-p2); }
+  .note {
+    background: #fff8e6; border-left: 4px solid #e8a23a;
+    padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-size: 14px;
+  }
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-4 { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .grid.cols-2 { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+
+  /* ========== 菜单示意 ========== */
+  .menu-mock {
+    background: #2b2b33; color: #eee; border-radius: 8px; padding: 6px 0; font-size: 13px; max-width: 280px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.2);
+  }
+  .menu-mock div { padding: 6px 16px; display: flex; justify-content: space-between; }
+  .menu-mock div:hover { background: #3d3d48; }
+  .menu-mock hr { border: 0; border-top: 1px solid #444; margin: 4px 0; }
+  .menu-mock .sub { color: #999; }
+
+  /* ========== 状态机 ========== */
+  .flow { font-family: Consolas, "Courier New", monospace; font-size: 13px; background: #1f1f24; color: #e6e6e6; padding: 16px 18px; border-radius: 10px; overflow-x: auto; white-space: pre; line-height: 1.6; }
+
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding: 8px 0 8px 30px; border-bottom: 1px dashed var(--border); position: relative; }
+  .checklist li::before { content: "☐"; position: absolute; left: 4px; font-size: 18px; top: 4px; color: var(--accent); }
+  .checklist li small { color: var(--text-sub); display: block; }
+
+  .metric { text-align: center; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .metric .value { font-size: 26px; font-weight: bold; color: var(--accent); }
+  .metric .label { font-size: 13px; color: var(--text-sub); }
+  footer { text-align: center; color: var(--text-sub); font-size: 13px; padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🐾 煤球 · 桌面喝水黑猫</h1>
+  <p>一只住在你 Windows 桌面上、会撒娇催你喝水的纯黑小猫</p>
+  <div class="meta">功能设计文档 v0.3 · 2026-10-23 · Tauri 2 + Vue 3 + Three.js + Rust</div>
+</header>
+
+<nav>
+  <a href="#overview">1. 产品概述</a>
+  <a href="#character">2. 形象设计（3D）</a>
+  <a href="#prototype">3. 桌面散步</a>
+  <a href="#features">4. 功能清单</a>
+  <a href="#interaction">5. 交互说明</a>
+  <a href="#reminder">6. 提醒规则</a>
+  <a href="#state">7. 状态机</a>
+  <a href="#settings">8. 设置项</a>
+  <a href="#data">9. 数据设计</a>
+  <a href="#tech">10. 技术架构</a>
+  <a href="#nfr">11. 性能与质量</a>
+  <a href="#milestone">12. 里程碑</a>
+  <a href="#todo">13. 待确认 / 建议补充</a>
+  <a href="#voice">14. 声音</a>
+  <a href="#skills">15. 扩展技能</a>
+</nav>
+
+<main>
+
+<!-- ================= 1. 产品概述 ================= -->
+<section id="overview">
+  <h2>1. 产品概述</h2>
+  <p><b>煤球</b>是一个 Windows 桌面端小工具。一只 Q 版 3D 纯黑猫住在你的桌面上，会在<b>没有窗口的空地上走来走去</b>、舔爪、伸懒腰、打盹；到点就跑到你身边喵喵叫，提醒你喝水，并记录每天的饮水量。</p>
+  <table>
+    <tr><th>目标用户</th><td>长时间坐在电脑前、经常忘记喝水的上班族、学生、程序员</td></tr>
+    <tr><th>核心价值</th><td>用"养猫"的情感陪伴代替冷冰冰的弹窗，让喝水提醒<b>不烦人、有反馈、想坚持</b></td></tr>
+    <tr><th>设计原则</th><td>① 不打扰：不抢焦点、不挡操作、全屏时自动安静<br>② 够可爱：表情丰富、台词俏皮<br>③ 有反馈：喝完水后猫咪有明显的开心回应，水碗水位上涨</td></tr>
+    <tr><th>运行平台</th><td>Windows 10（1809 及以上）/ Windows 11，x64</td></tr>
+    <tr><th>形态</th><td>本地安装的桌面应用（<code>.exe</code> 安装包），无账号，数据只存在本机；默认不联网，只有接入语音服务（以后还有 AI 对话）时才联网</td></tr>
+  </table>
+</section>
+
+<!-- ================= 2. 形象与表情 ================= -->
+<section id="character">
+  <h2>2. 形象设计（3D）</h2>
+  <div class="note">🎮 <b>可以玩的 3D 小样：</b><a href="cat-3d-prototype.html" target="_blank">打开 cat-3d-prototype.html</a>（需要联网加载 Three.js）。里面模拟了一个桌面，可以拖窗口、最大化，看煤球怎么找空地散步。</div>
+  <img src="images/prototype-remind.png" alt="3D 小样截图：煤球跑到鼠标附近提醒喝水" style="width:100%;border-radius:10px;border:1px solid var(--border);margin:8px 0">
+
+  <h3>2.1 为什么用 3D</h3>
+  <table>
+    <tr><th>需求</th><th>3D 怎么满足</th></tr>
+    <tr><td>满桌面走来走去</td><td>往任意方向走都能自然转身：往上走看到背影，往下走面朝你，横着走看到侧面</td></tr>
+    <tr><td>灵动</td><td>走路步态、尾巴波浪摆动、转头看鼠标、眨眼、抖耳朵、呼吸起伏，全部实时计算</td></tr>
+    <tr><td>效果可以随时改</td><td>猫的骨骼和动作<b>全部由代码驱动</b>（关键姿势混合 + 程序化动画），不依赖图形编辑器</td></tr>
+  </table>
+
+  <h3>2.2 造型</h3>
+  <table>
+    <tr><th>部位</th><th>设计</th><th>颜色 / 材质</th></tr>
+    <tr><td>整体比例</td><td>Q 版：大头（1.25 倍）、短圆身子、短粗腿</td><td>—</td></tr>
+    <tr><td>毛发</td><td>哑光黑色 + 绒毛反光（sheen），不像塑料</td><td><code>#17171b</code></td></tr>
+    <tr><td>轮廓光</td><td>两盏轮廓光固定在镜头后方，猫无论朝哪边，边缘都有一圈淡淡的亮边，在纯黑壁纸上也看得清</td><td>冷白 + 暖白</td></tr>
+    <tr><td>眼睛</td><td>黄绿色大眼睛 + 竖瞳 + 高光；瞳孔会跟着鼠标转，受惊时放大</td><td><code>#c9e84a</code></td></tr>
+    <tr><td>鼻子 / 内耳 / 肉垫</td><td>粉色点缀；趴着的时候能看到粉色肉垫</td><td><code>#f29aac</code></td></tr>
+    <tr><td>尾巴</td><td>13 节骨骼，每帧生成一根平滑渐细的管子，从根部到尾尖做波浪摆动</td><td>—</td></tr>
+    <tr><td>地面阴影</td><td>脚下一团柔和的椭圆阴影，让猫"站"在桌面上；被拎起来时阴影消失</td><td>—</td></tr>
+  </table>
+
+  <h3>2.3 模型来源</h3>
+  <table>
+    <tr><th>阶段</th><th>方案</th></tr>
+    <tr><td>现在（小样）</td><td>代码搭建的 Q 版黑猫：基本几何体拼出来，所有部位都能用参数调整</td></tr>
+    <tr><td>正式版（可选升级）</td><td>换成更精细的 glTF 模型（例如 Sketchfab 上 CC BY 授权的带骨骼黑猫，需要署名），用 Blender 的 Python 脚本补表情；动作系统不变</td></tr>
+  </table>
+
+  <h3>2.4 动作与表情一览</h3>
+  <table>
+    <tr><th>行为</th><th>姿势与表现</th><th>什么时候出现</th></tr>
+    <tr><td>散步 wander</td><td>对角小跑步态，尾巴竖起轻摆，按照移动距离推进步伐（不滑步）</td><td>空闲时随机，约一半时间在走</td></tr>
+    <tr><td>坐着 sit</td><td>前身抬起、后腿收在身下，大多数时候转过来面向你</td><td>走累了随机坐下</td></tr>
+    <tr><td>站着张望 stand</td><td>四脚站立，转头看看四周</td><td>随机</td></tr>
+    <tr><td>舔爪洗脸 groom</td><td>坐着抬起右前爪到嘴边，低头舔，眯眼</td><td>随机</td></tr>
+    <tr><td>伸懒腰 stretch</td><td>前爪往前伸、屁股翘高、尾巴竖起、打哈欠</td><td>随机 / 睡醒时</td></tr>
+    <tr><td>趴着休息 rest</td><td>揣手趴下，半眯眼，尾巴绕到身边</td><td>随机</td></tr>
+    <tr><td>睡觉 sleep</td><td>团成一团、闭眼、呼吸变慢、冒 Zzz，渲染降到 10 帧</td><td>你离开电脑时</td></tr>
+    <tr><td>溜走 flee</td><td>耳朵往后压，快跑离开</td><td>窗口压过来 / 鼠标猛冲过来</td></tr>
+    <tr><td>好奇 look</td><td>转头盯着鼠标，竖起耳朵，瞳孔跟随</td><td>鼠标慢慢靠近时</td></tr>
+    <tr><td>被摸 petted</td><td>眯眼、歪头、尾巴竖起、冒爱心</td><td>单击猫</td></tr>
+    <tr><td>被拎起 lifted</td><td>身体被拎直、四条腿乱蹬、尾巴垂下、瞳孔放大、耳朵往后压</td><td>按住猫拖动</td></tr>
+    <tr><td>提醒 remind</td><td>跑到鼠标附近坐下，抬头看你，张嘴喵喵叫，歪头，竖耳朵</td><td>到点提醒</td></tr>
+    <tr><td>开心 happy</td><td>眯眼、跳一跳、尾巴高高竖起、冒水滴</td><td>喝完水</td></tr>
+    <tr><td>傲娇 sulk</td><td>转过身背对你，尾巴快速甩动，耳朵往后压</td><td>点"等一下嘛"</td></tr>
+  </table>
+</section>
+
+<section id="prototype">
+  <h2>3. 桌面散步设计</h2>
+  <h3>3.1 不影响办公的几条原则</h3>
+  <table>
+    <tr><th>原则</th><th>做法</th></tr>
+    <tr><td>只走空地</td><td>实时获取所有可见窗口的位置，把桌面切成 24 像素的网格，算出猫能完整站下、又不碰任何窗口的格子，只在这些格子里走动</td></tr>
+    <tr><td>绕路而不是穿过</td><td>用广度优先搜索规划路线，再把折线拉直成自然的路径；被窗口隔开的空地不会直接"穿墙"过去</td></tr>
+    <tr><td>被压住就让开</td><td>你拖动或打开窗口盖住猫时，它会说"喵！差点被压到！"，然后跑到最近的空地</td></tr>
+    <tr><td>没空地就去任务栏</td><td>窗口全都最大化时，猫跑到任务栏上沿来回溜达或坐着，不挡窗口内容；一有空地就回到桌面</td></tr>
+    <tr><td>不抢鼠标</td><td>猫以外的区域全部点击穿透；只有点到猫身上才算和它互动</td></tr>
+    <tr><td>不抢焦点</td><td>猫的窗口永远不获取键盘焦点，你打字不会被打断</td></tr>
+    <tr><td>省电</td><td>正常 30 帧，睡觉 10 帧；正式版里猫静止不动时还会再降帧</td></tr>
+  </table>
+
+  <h3>3.2 散步行为规则</h3>
+  <table>
+    <tr><th>编号</th><th>规则</th></tr>
+    <tr><td>W1</td><td>每段行为结束后随机选下一个：散步约 48%、坐 16%、站 8%、舔爪 12%、伸懒腰 7%、趴着 9%</td></tr>
+    <tr><td>W2</td><td>散步目的地在当前位置 4~28 格范围内随机挑选，速度约 62 像素/秒</td></tr>
+    <tr><td>W3</td><td>转身角度太大时先原地转身再走，不会"倒着走"</td></tr>
+    <tr><td>W4</td><td>鼠标慢慢靠近：猫转头看你、竖耳朵，等你来摸（不会跑）</td></tr>
+    <tr><td>W5</td><td>鼠标高速冲向猫（超过 1400 像素/秒）：被吓到，往远离鼠标的方向跑开</td></tr>
+    <tr><td>W6</td><td>刚被摸过 3 秒内不会被吓跑</td></tr>
+    <tr><td>W7</td><td>提醒时跑到离鼠标约 190 像素的空地坐下，保证你一眼看到它，又不会挡住鼠标正在操作的地方</td></tr>
+    <tr><td>W8</td><td>拎起来放下：放到空地 → 自由散步；放到窗口上 → <b>就待在那儿</b>（你放的位置说了算）；放到屏幕底边 → 沿边缘溜达</td></tr>
+  </table>
+
+  <h3>3.3 三种散步模式（右键菜单切换）</h3>
+  <table>
+    <tr><th>模式</th><th>表现</th><th>怎么进入</th></tr>
+    <tr><td>🐾 自由散步（默认）</td><td>在空地上散步、偷看；没有空地时自动去屏幕底边，有空地了再回来</td><td>默认 / 右键菜单 / 放到空地上</td></tr>
+    <tr><td>📌 待在这里</td><td>原地坐、舔爪、趴着、睡觉，不走动；窗口压过来也不躲（浮在最上层）；提醒时原地喵喵叫</td><td>右键菜单 / 把它放到窗口上</td></tr>
+    <tr><td>⬇ 在边缘溜达</td><td>只在屏幕底边（任务栏上沿）走，从屏幕两侧、任务栏后面探头</td><td>右键菜单 / 把它放到屏幕底边</td></tr>
+  </table>
+
+  <h3>3.4 全屏工作时</h3>
+  <table>
+    <tr><th>场景</th><th>表现</th></tr>
+    <tr><td>窗口全部最大化</td><td>没有空地 → 猫浮在最上层，沿任务栏上沿溜达，从任务栏后面、屏幕两侧探头</td></tr>
+    <tr><td>全屏应用（F11、全屏视频、PPT）</td><td>任务栏被盖住 → 猫走到<b>屏幕最底边</b>，一半时间躲在屏幕下面只露出脑袋偷看，更低调</td></tr>
+    <tr><td>随时可以手动拖拽</td><td>按住猫拎起来放到任何地方，它会待在那里</td></tr>
+  </table>
+
+  <h3>3.5 🙈 偷看（躲猫猫）</h3>
+  <p>煤球会找个地方躲起来，悄悄探出脑袋看看主人在做什么。这是它最有"灵魂"的行为。</p>
+  <table>
+    <tr><th>藏身处</th><th>探头方式</th></tr>
+    <tr><td>窗口左右两侧</td><td>躲在窗口后面，从侧边探出半个脑袋，歪着头</td></tr>
+    <tr><td>窗口顶边</td><td>躲在窗口后面，两只前爪扒着窗口上沿，脑袋冒出来</td></tr>
+    <tr><td>任务栏后面</td><td>从任务栏上沿冒头</td></tr>
+    <tr><td>屏幕左右边缘</td><td>躲在屏幕外面，从边缘探出半个脑袋</td></tr>
+    <tr><td>屏幕底边（全屏时）</td><td>躲在屏幕下面，从底边冒头</td></tr>
+  </table>
+  <div class="flow"> 蹑手蹑脚走过去（压低身子、耳朵朝前、步子小）
+   → 钻进去一半，尾巴尖还露在外面得意地晃（藏头露尾）
+   → 整个藏好，在里面偷偷转身
+   → 慢慢探出半个脑袋，歪头、竖耳朵，眼珠跟着你的鼠标转，偶尔冒 👀 / ？
+   → ┬ 鼠标指到它头上：愣住、瞪大眼睛"喵？"——"被、被发现了…" → 嗖地缩回去 → 过一会儿再偷偷探出来（躲猫猫）
+     ├ 鼠标猛冲过来：嗖地缩回去
+     ├ 被摸头：害羞冒爱心、呼噜，但不出来
+     └ 看够了：有时自己缩回去再探一次，最后从藏身处走出来继续散步
+ 你拖动它藏身的窗口：它扒着窗口跟着一起走
+ 窗口被最小化 / 关掉：它"哇！我的掩护没了！"，然后找地方落脚</div>
+  <table>
+    <tr><th>技术要点</th><th>做法</th></tr>
+    <tr><td>"躲在窗口后面"的效果</td><td>猫的窗口始终在最上层；把猫和藏身窗口重叠的部分<b>裁成透明</b>（正式版用 CSS clip-path / WebGL 裁剪），看起来就像躲在后面</td></tr>
+    <tr><td>点击</td><td>被裁掉的部分不算猫身体，点击直接穿透到下面的窗口</td></tr>
+    <tr><td>选藏身处</td><td>脑袋探出去的地方必须在屏幕内、不被别的窗口挡；身体必须能完全藏进窗口；藏之前站的位置必须走得到</td></tr>
+    <tr><td>频率</td><td>自由散步时约 16%；在边缘时约 30%；全屏时约 50%</td></tr>
+  </table>
+</section>
+
+<!-- ================= 4. 功能清单 ================= -->
+<section id="features">
+  <h2>4. 功能清单</h2>
+  <p><span class="tag p0">P0</span> 第一版必须有（MVP） &nbsp; <span class="tag p1">P1</span> 体验增强 &nbsp; <span class="tag p2">P2</span> 锦上添花（可选）</p>
+  <table>
+    <tr><th>编号</th><th>优先级</th><th>模块</th><th>功能</th><th>说明</th></tr>
+    <tr><td>F01</td><td><span class="tag p0">P0</span></td><td>窗口</td><td>透明悬浮窗</td><td>无边框、背景透明、始终置顶、不显示在任务栏、不抢键盘焦点</td></tr>
+    <tr><td>F02</td><td><span class="tag p0">P0</span></td><td>窗口</td><td>点击穿透</td><td>猫身体以外的透明区域可以直接点到下面的桌面/窗口</td></tr>
+    <tr><td>F03</td><td><span class="tag p0">P0</span></td><td>交互</td><td>拎起来换位置</td><td>按住猫拎起来放到别处；放到窗口上它会自己走到空地；下次启动回到上次的位置，拔掉副屏后自动回到主屏</td></tr>
+    <tr><td>F04</td><td><span class="tag p0">P0</span></td><td>形象</td><td>3D 黑猫与日常动作</td><td>Q 版 3D 黑猫；呼吸、眨眼、甩尾巴、抖耳朵、坐、站、舔爪、伸懒腰、趴着（见 2.4）</td></tr>
+    <tr><td>F30</td><td><span class="tag p0">P0</span></td><td>散步</td><td>桌面散步</td><td>在空地上随机散步，按方向自然转身，步伐和移动距离对齐不滑步（见第 3 节）</td></tr>
+    <tr><td>F31</td><td><span class="tag p0">P0</span></td><td>散步</td><td>空地检测与避让</td><td>实时获取窗口位置，只走空地、绕开窗口；窗口压过来时自己跑开</td></tr>
+    <tr><td>F32</td><td><span class="tag p0">P0</span></td><td>散步</td><td>任务栏栖息</td><td>没有空地（窗口全最大化）时，去任务栏上沿溜达；有空地后回到桌面</td></tr>
+    <tr><td>F33</td><td><span class="tag p1">P1</span></td><td>散步</td><td>鼠标互动</td><td>鼠标慢慢靠近：好奇地看；鼠标猛冲过来：吓跑</td></tr>
+    <tr><td>F35</td><td><span class="tag p0">P0</span></td><td>散步</td><td>偷看（躲猫猫）</td><td>躲在窗口侧边/顶边、任务栏、屏幕边缘后面探头偷看，会被"抓包"（见 3.5）</td></tr>
+    <tr><td>F36</td><td><span class="tag p0">P0</span></td><td>散步</td><td>散步模式 + 全屏适配</td><td>自由散步 / 待在这里 / 在边缘溜达；全屏时浮在最上层、在屏幕底边低调偷看（见 3.3、3.4）</td></tr>
+    <tr><td>F37</td><td><span class="tag p0">P0</span></td><td>声音</td><td>猫叫 + 语音提醒</td><td>合成猫叫、呼噜；提醒时先"喵～"再用语音说台词，气泡文字当字幕（见第 14 节）</td></tr>
+    <tr><td>F38</td><td><span class="tag p1">P1</span></td><td>声音</td><td>带情绪的高质量语音</td><td>✅ 已用萌丫头音色按情绪预生成 46 句，离线播放（见 14.4）</td></tr>
+    <tr><td>F39</td><td><span class="tag p0">P0</span></td><td>扩展</td><td>技能菜单</td><td>右键猫弹出技能菜单，技能统一注册，方便以后加截屏、AI 对话（见第 15 节）</td></tr>
+    <tr><td>F40</td><td><span class="tag p2">P2</span></td><td>扩展</td><td>截屏 / AI 对话等技能</td><td>后续能力，先在菜单里占位"即将推出"</td></tr>
+    <tr><td>F05</td><td><span class="tag p0">P0</span></td><td>提醒</td><td>定时提醒</td><td>默认每 45 分钟一次，从上次喝水开始计时</td></tr>
+    <tr><td>F06</td><td><span class="tag p0">P0</span></td><td>提醒</td><td>提醒气泡</td><td>猫跳起来 + 对话气泡（随机台词）+「喝完啦」「等一下嘛」两个按钮</td></tr>
+    <tr><td>F07</td><td><span class="tag p0">P0</span></td><td>提醒</td><td>稍后提醒</td><td>点「等一下嘛」后 10 分钟再提醒，猫傲娇转身</td></tr>
+    <tr><td>F08</td><td><span class="tag p0">P0</span></td><td>记录</td><td>饮水打卡</td><td>气泡按钮、双击猫、右键菜单、托盘菜单都能记一杯</td></tr>
+    <tr><td>F09</td><td><span class="tag p0">P0</span></td><td>系统</td><td>系统托盘</td><td>托盘图标 + 菜单；悬停显示今日进度和下次提醒时间</td></tr>
+    <tr><td>F10</td><td><span class="tag p0">P0</span></td><td>系统</td><td>防多开</td><td>重复启动时只把已有的猫叫出来</td></tr>
+    <tr><td>F11</td><td><span class="tag p1">P1</span></td><td>记录</td><td>水碗进度</td><td>提醒时猫身边出现一个 3D 小水碗，水位随今日杯数上涨，达标后冒爱心 + 庆祝台词</td></tr>
+    <tr><td>F12</td><td><span class="tag p1">P1</span></td><td>形象</td><td>情绪系统</td><td>开心 / 普通 / 口渴 / 生气 / 睡觉等状态自动切换（见第 7 节）</td></tr>
+    <tr><td>F13</td><td><span class="tag p1">P1</span></td><td>形象</td><td>目光跟随鼠标</td><td>鼠标在附近时转头看你，瞳孔跟着鼠标转</td></tr>
+    <tr><td>F14</td><td><span class="tag p1">P1</span></td><td>交互</td><td>右键菜单</td><td>快捷记一杯（可选容量）、撤销、今日统计、暂停、设置、隐藏</td></tr>
+    <tr><td>F15</td><td><span class="tag p1">P1</span></td><td>记录</td><td>撤销上一杯</td><td>误点后 1 分钟内可撤销，也可以在右键菜单里撤销</td></tr>
+    <tr><td>F16</td><td><span class="tag p1">P1</span></td><td>提醒</td><td>工作时段 / 勿扰时段</td><td>只在工作时段提醒；午休等勿扰时段不提醒</td></tr>
+    <tr><td>F17</td><td><span class="tag p1">P1</span></td><td>提醒</td><td>离开检测</td><td>键鼠 5 分钟无操作就暂停计时，人回来后重新开始</td></tr>
+    <tr><td>F18</td><td><span class="tag p1">P1</span></td><td>提醒</td><td>全屏免打扰</td><td>全屏游戏 / 看视频 / 放 PPT 时推迟提醒，退出全屏后再提醒</td></tr>
+    <tr><td>F19</td><td><span class="tag p1">P1</span></td><td>提醒</td><td>提醒升级</td><td>忽略提醒后猫逐步变得口渴、生气，提醒更明显</td></tr>
+    <tr><td>F20</td><td><span class="tag p1">P1</span></td><td>系统</td><td>设置窗口</td><td>所有设置项（见第 8 节）</td></tr>
+    <tr><td>F21</td><td><span class="tag p1">P1</span></td><td>系统</td><td>开机自启</td><td>设置里开关，默认关闭</td></tr>
+    <tr><td>F22</td><td><span class="tag p1">P1</span></td><td>形象</td><td>音效</td><td>喵～、呼噜、舔水声，可调音量 / 关闭</td></tr>
+    <tr><td>F23</td><td><span class="tag p1">P1</span></td><td>散步</td><td>活跃度 / 散步范围</td><td>活跃度：安静（多坐少走）/ 正常 / 活泼；范围：整个桌面 / 只在任务栏上方 / 待在原地不走</td></tr>
+    <tr><td>F24</td><td><span class="tag p1">P1</span></td><td>窗口</td><td>猫咪大小</td><td>可调 75% / 100% / 125% / 150%</td></tr>
+    <tr><td>F25</td><td><span class="tag p2">P2</span></td><td>统计</td><td>历史统计</td><td>近 7 天 / 30 天饮水柱状图、达标率、连续达标天数</td></tr>
+    <tr><td>F26</td><td><span class="tag p2">P2</span></td><td>统计</td><td>成就徽章</td><td>连续 3 / 7 / 30 天达标、单日 10 杯等</td></tr>
+    <tr><td>F27</td><td><span class="tag p2">P2</span></td><td>形象</td><td>配饰换装</td><td>铃铛项圈、蝴蝶结、围巾、节日帽子；可用成就解锁</td></tr>
+    <tr><td>F28</td><td><span class="tag p2">P2</span></td><td>散步</td><td>爬窗口</td><td>跳上窗口标题栏，在上面走、趴着，从一个窗口跳到另一个窗口（经典桌宠 Shimeji 玩法）</td></tr>
+    <tr><td>F34</td><td><span class="tag p2">P2</span></td><td>散步</td><td>跨显示器散步</td><td>多显示器时可以从一块屏幕走到另一块</td></tr>
+    <tr><td>F29</td><td><span class="tag p2">P2</span></td><td>形象</td><td>节日彩蛋</td><td>春节、万圣节（黑猫主场！）、生日等特殊台词和装扮</td></tr>
+  </table>
+</section>
+
+<!-- ================= 5. 交互说明 ================= -->
+<section id="interaction">
+  <h2>5. 交互说明</h2>
+  <h3>5.1 鼠标操作</h3>
+  <table>
+    <tr><th>操作</th><th>效果</th></tr>
+    <tr><td>鼠标慢慢靠近</td><td>猫转头盯着鼠标、竖起耳朵，等你来摸</td></tr>
+    <tr><td>鼠标猛冲过去</td><td>猫被吓到「喵嗷！」，往远离鼠标的方向跑开</td></tr>
+    <tr><td>悬停在猫身上</td><td>鼠标变成小手；1 秒后显示小提示「今日 3/8 杯 · 下次 15:45」</td></tr>
+    <tr><td>单击猫</td><td>摸摸：眯眼歪头、冒爱心、随机撒娇台词（不记录喝水）；睡着时会被叫醒并伸懒腰</td></tr>
+    <tr><td>双击猫</td><td>快速记一杯（默认容量），猫开心跳一跳</td></tr>
+    <tr><td>按住拖动</td><td>把猫拎起来：四爪乱蹬「放本喵下来！」；放下后如果落在窗口上，它会自己走到空地</td></tr>
+    <tr><td>右键猫</td><td>弹出技能菜单（见 5.2）</td></tr>
+    <tr><td>偷看时鼠标指到它头上</td><td>被"抓包"：愣住"喵？"，嗖地缩回去，过一会儿再探出来</td></tr>
+    <tr><td>提醒气泡「喝完啦」</td><td>记一杯 → 开心状态 3 秒 → 重新计时</td></tr>
+    <tr><td>提醒气泡「等一下嘛」</td><td>傲娇转身 → 10 分钟后再提醒</td></tr>
+    <tr><td>托盘图标左键</td><td>显示 / 隐藏煤球</td></tr>
+    <tr><td>托盘图标右键</td><td>弹出托盘菜单</td></tr>
+  </table>
+
+  <h3>5.2 菜单设计</h3>
+  <div class="grid cols-2">
+    <div>
+      <p><b>技能菜单（右键猫）</b></p>
+      <div class="menu-mock">
+        <div>💧 我喝了一杯 <span class="sub">▸</span></div>
+        <div style="padding-left:34px" class="sub">100ml / 250ml（默认）/ 500ml / 自定义…</div>
+        <div>↩ 撤销上一杯</div>
+        <div>🤚 摸摸煤球</div>
+        <div>👀 去偷看一下</div>
+        <hr>
+        <div>🐾 自由散步 <span class="sub">✓</span></div>
+        <div>📌 待在这里别动</div>
+        <div>⬇ 去屏幕边缘待着</div>
+        <hr>
+        <div>📷 截屏 <span class="sub">即将推出</span></div>
+        <div>💬 AI 对话 <span class="sub">即将推出</span></div>
+        <hr>
+        <div>📊 今日统计 <span class="sub">3 / 8 杯</span></div>
+        <div>⏸ 暂停提醒 <span class="sub">▸</span></div>
+        <div>🔇 静音 / 🔊 声音</div>
+        <div>⚙ 设置</div>
+        <div>🙈 隐藏煤球</div>
+      </div>
+    </div>
+    <div>
+      <p><b>托盘菜单</b></p>
+      <div class="menu-mock">
+        <div>🐾 显示 / 隐藏煤球</div>
+        <div>💧 我喝了一杯</div>
+        <hr>
+        <div>⏸ 暂停提醒 <span class="sub">▸</span></div>
+        <div>🔔 立即提醒一次（测试用）</div>
+        <hr>
+        <div>⚙ 设置</div>
+        <div>🚀 开机自启 <span class="sub">✓</span></div>
+        <div>ℹ 关于</div>
+        <hr>
+        <div>🚪 退出</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 6. 提醒规则 ================= -->
+<section id="reminder">
+  <h2>6. 提醒规则</h2>
+  <table>
+    <tr><th>编号</th><th>规则</th><th>说明</th></tr>
+    <tr><td>R1</td><td>计时起点</td><td>从<b>上一次喝水</b>开始计时；当天第一次启动时从启动时间开始计时</td></tr>
+    <tr><td>R2</td><td>任何时候记一杯都重新计时</td><td>不管是不是在提醒中，主动喝水都重新开始计时</td></tr>
+    <tr><td>R3</td><td>工作时段</td><td>默认 09:00–18:00 才提醒（可关闭此限制）；时段外不计时</td></tr>
+    <tr><td>R4</td><td>勿扰时段</td><td>默认 12:00–13:30 午休不提醒，可添加多个时段</td></tr>
+    <tr><td>R5</td><td>离开检测</td><td>键鼠 5 分钟无操作 → 暂停计时，猫进入睡觉状态；有操作后重新开始计时（猫醒来说"欢迎回来～"）</td></tr>
+    <tr><td>R6</td><td>全屏免打扰</td><td>检测到全屏 / 演示模式时推迟提醒；退出后 1 分钟再提醒</td></tr>
+    <tr><td>R7</td><td>气泡停留</td><td>提醒气泡显示 60 秒，没有操作就收起，算作"忽略"</td></tr>
+    <tr><td>R8</td><td>提醒升级</td><td>忽略 1 次 → 口渴状态，10 分钟后再提醒；忽略 2 次及以上 → 生气状态，之后每 10 分钟提醒一次</td></tr>
+    <tr><td>R9</td><td>手动暂停</td><td>托盘 / 右键菜单可暂停 30 分钟、1 小时或今天</td></tr>
+    <tr><td>R10</td><td>每日重置</td><td>每天凌晨 4:00 重置今日杯数（照顾熬夜的人）</td></tr>
+    <tr><td>R11</td><td>达标之后</td><td>达成每日目标后继续提醒，但改用温和台词，频率不变</td></tr>
+  </table>
+</section>
+
+<!-- ================= 7. 状态机 ================= -->
+<section id="state">
+  <h2>7. 煤球状态机</h2>
+<div class="flow"> ┌──────────────── 日常行为（随机轮换，见 W1）────────────────┐
+ │  [散步 wander] ⇄ [坐 sit] ⇄ [站 stand] ⇄ [舔爪 groom]       │
+ │        ⇅            ⇅                                         │
+ │  [伸懒腰 stretch]  [趴着 rest]                                │
+ └──────┬─────────────────────────────────────────────────────┘
+        │
+        ├──窗口压过来 / 鼠标猛冲──▶ [溜走 flee] ──到达空地──▶ 日常行为
+        ├──没有空地──▶ [溜走 flee] ──▶ 任务栏上沿（日常行为继续，只在任务栏上走）
+        ├──单击──▶ [被摸 petted] ──2秒──▶ 日常行为
+        ├──按住拖动──▶ [被拎起 lifted] ──松手──▶ [落地 landing] ──▶ 日常行为 / 溜走
+        ├──5分钟无键鼠操作──▶ [睡觉 sleep] ──有操作 / 被点──▶ [伸懒腰] ──▶ 日常行为
+        │
+        └──到点──▶ [跑过来 goRemind] ──▶ [提醒 remind] ──喝完啦──▶ [开心 happy] ──3秒──▶ 日常行为
+                                            │
+                                            ├──等一下嘛──▶ [傲娇 sulk] ──3秒──▶ 日常行为（10分钟后再提醒）
+                                            └──60秒无响应──▶ [口渴 thirsty] ──再次忽略──▶ [生气 angry]
+                                                                 └──── 喝完啦 ────┴──▶ [开心]
+
+ 优先级（高 → 低）：被拎起 > 提醒/口渴/生气 > 溜走 > 开心/傲娇/被摸 > 睡觉 > 日常行为
+ 提醒中被窗口压住：先溜走，到空地后继续提醒</div>
+</section>
+
+<!-- ================= 8. 设置项 ================= -->
+<section id="settings">
+  <h2>8. 设置项</h2>
+  <p>设置窗口从托盘「⚙ 设置…」或右键猫「⚙ 设置…」打开；<b>修改后自动保存、立即生效</b>，保存在本机 <code>%APPDATA%\com.meiqiu.waterpet\settings.json</code>。托盘里还有「🔊 声音」「🚀 开机自启」两个快捷勾选项，和设置窗口同步。</p>
+  <table>
+    <tr><th>分组</th><th>设置项</th><th>默认值</th><th>可选范围</th></tr>
+    <tr><td rowspan="6">💧 喝水提醒</td><td>多久提醒一次</td><td>45 分钟</td><td>15–180 分钟</td></tr>
+    <tr><td>点"等一下嘛"后多久再提醒</td><td>10 分钟</td><td>5–30 分钟</td></tr>
+    <tr><td>只在工作时段提醒</td><td>开启，<b>09:00–17:30</b></td><td>可关闭、可改时间</td></tr>
+    <tr><td>勿扰时段</td><td><b>午休 11:30–13:00</b></td><td>最多 5 段，每段可单独开关</td></tr>
+    <tr><td>全屏时不打扰</td><td>开启</td><td>开 / 关</td></tr>
+    <tr><td>离开电脑多久算"不在"</td><td>5 分钟</td><td>3–30 分钟</td></tr>
+    <tr><td rowspan="2">📅 定时提醒</td><td>📝 录单子</td><td><b>17:00</b>，周一到周五</td><td rowspan="2">最多 10 条；时间、标题、要说的话、星期几都能改；不受工作时段/勿扰时段限制；点"等一下嘛"会稍后再提醒，直到点"做完啦"</td></tr>
+    <tr><td>🕠 下班打卡</td><td><b>17:30</b>，周一到周五</td></tr>
+    <tr><td rowspan="2">🥤 饮水</td><td>每日目标</td><td>8 杯</td><td>1–20 杯</td></tr>
+    <tr><td>每杯容量</td><td>250 ml</td><td>50–1000 ml</td></tr>
+    <tr><td rowspan="3">🔊 声音</td><td>声音开关</td><td>开</td><td>开 / 关（托盘、右键菜单也能切换）</td></tr>
+    <tr><td>声音模式</td><td>猫叫 + 说话</td><td>猫叫 + 说话 / 只有猫叫</td></tr>
+    <tr><td>音量</td><td>80%</td><td>0–100%</td></tr>
+    <tr><td rowspan="3">🐾 散步</td><td>启动时的散步模式</td><td>自由散步</td><td>自由散步 / 待在原地 / 在屏幕边缘</td></tr>
+    <tr><td>活跃度</td><td>正常</td><td>安静（多坐少走）/ 正常 / 活泼</td></tr>
+    <tr><td>鼠标猛冲会吓跑</td><td>开</td><td>开 / 关</td></tr>
+    <tr><td>⚙ 系统</td><td>开机自动启动</td><td>关</td><td>开 / 关（托盘也能切换）</td></tr>
+  </table>
+  <div class="note">下一步计划：<b>猫咪大小</b>（75%–150%，需要窗口尺寸和走路/偷看距离一起缩放）、饮水历史统计。</div>
+</section>
+
+<!-- ================= 9. 数据设计 ================= -->
+<section id="data">
+  <h2>9. 数据设计</h2>
+  <p>所有数据保存在本机 <code>%APPDATA%\com.meiqiu.waterpet\</code>，不上传任何地方。</p>
+  <h3>9.1 设置（settings.json，tauri-plugin-store）</h3>
+  <p>保存第 8 节的所有设置项，以及猫咪最后的位置 <code>{ x, y, monitorName, isPerching }</code>。</p>
+
+  <h3>9.2 饮水记录表 <code>drink_records</code>（SQLite）</h3>
+  <table>
+    <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+    <tr><td>id</td><td>INTEGER PK</td><td>自增主键</td></tr>
+    <tr><td>drank_at</td><td>TEXT</td><td>喝水时间（本地时间 ISO 8601）</td></tr>
+    <tr><td>stat_date</td><td>TEXT</td><td>归属日期（按凌晨 4 点切分），建索引，方便按天统计</td></tr>
+    <tr><td>volume_ml</td><td>INTEGER</td><td>本次饮水量</td></tr>
+    <tr><td>source</td><td>TEXT</td><td>记录来源：bubble / double_click / context_menu / tray</td></tr>
+  </table>
+
+  <h3>9.3 提醒事件表 <code>reminder_events</code>（SQLite）</h3>
+  <table>
+    <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+    <tr><td>id</td><td>INTEGER PK</td><td>自增主键</td></tr>
+    <tr><td>fired_at</td><td>TEXT</td><td>提醒时间</td></tr>
+    <tr><td>result</td><td>TEXT</td><td>drank（喝了）/ snoozed（稍后）/ ignored（忽略）</td></tr>
+    <tr><td>escalation_level</td><td>INTEGER</td><td>升级等级：0 正常 / 1 口渴 / 2 生气</td></tr>
+  </table>
+  <div class="note">提醒事件表用来做"提醒响应率"统计（P2），也方便以后调整提醒策略。</div>
+</section>
+
+<!-- ================= 10. 技术架构 ================= -->
+<section id="tech">
+  <h2>10. 技术架构</h2>
+<div class="flow">┌──────────────────────── 煤球.exe（Windows 桌面应用）────────────────────────┐
+│                                                                              │
+│  ┌──────────── 界面层（Vue 3 + TS，WebView2 渲染）────────────┐               │
+│  │  宠物窗口（只有猫那么大，跟着猫移动）：                       │               │
+│  │    BlackCatModel.ts  Three.js 3D 黑猫（骨骼 + 姿势混合）     │               │
+│  │    CatBrain.ts       行为状态机：散步/坐/舔爪/睡觉/提醒…     │               │
+│  │    FreeSpaceMap.ts   空地网格 + 寻路（BFS + 路径拉直）       │               │
+│  │    SpeechBubble · WaterBowl · dialogueLines.ts（台词）       │               │
+│  │  设置窗口 / 统计窗口（按需创建，关闭即销毁）                 │               │
+│  └──────────────────────┬──────────────────────────────────────┘               │
+│               invoke 命令 ▲│▼ emit 事件                                          │
+│  ┌──────────────────────┴──── 核心层（Rust）──────────────────────┐            │
+│  │  desktop_layout      Win32：EnumWindows 列出可见窗口矩形         │            │
+│  │                      （排除最小化/隐藏/cloaked 窗口）            │            │
+│  │                      SetWinEventHook 监听窗口移动，变化才推送    │            │
+│  │  pet_window          SetWindowPos 移动猫窗口（不抢焦点）         │            │
+│  │                      位置记忆、多显示器校验                     │            │
+│  │  reminder_scheduler  提醒调度（tokio 定时、升级、暂停）          │            │
+│  │  click_through       鼠标命中检测 → 自动切换点击穿透            │            │
+│  │  system_state        Win32：GetLastInputInfo（离开检测）        │            │
+│  │                             SHQueryUserNotificationState（全屏）│            │
+│  │  tray                托盘图标与菜单                             │            │
+│  │  drink_records       SQLite（rusqlite，WAL 模式）               │            │
+│  │  settings            tauri-plugin-store                         │            │
+│  └────────────────────────────────────────────────────────────────┘            │
+│  官方插件：autostart · single-instance · store · notification（兜底）          │
+└──────────────────────────────────────────────────────────────────────────────┘</div>
+  <h3>前后端通信</h3>
+  <table>
+    <tr><th>方向</th><th>名称</th><th>用途</th></tr>
+    <tr><td>前端 → Rust</td><td><code>record_drink(volume_ml, source)</code></td><td>记一杯，返回今日进度</td></tr>
+    <tr><td>前端 → Rust</td><td><code>undo_last_drink()</code></td><td>撤销上一杯</td></tr>
+    <tr><td>前端 → Rust</td><td><code>snooze_reminder()</code></td><td>稍后提醒</td></tr>
+    <tr><td>前端 → Rust</td><td><code>get_today_summary()</code></td><td>今日杯数、目标、下次提醒时间</td></tr>
+    <tr><td>前端 → Rust</td><td><code>update_hit_region(rects)</code></td><td>上报猫的轮廓区域，用于点击穿透判断</td></tr>
+    <tr><td>前端 → Rust</td><td><code>move_pet_window(x, y)</code></td><td>猫走动时移动猫窗口（约 30 次/秒，不抢焦点）</td></tr>
+    <tr><td>前端 → Rust</td><td><code>get_desktop_layout()</code></td><td>获取工作区和所有可见窗口的矩形，用来计算空地</td></tr>
+    <tr><td>Rust → 前端</td><td><code>desktop-layout-changed</code></td><td>窗口移动、打开、关闭、最大化时推送新布局</td></tr>
+    <tr><td>前端 → Rust</td><td><code>get_settings()</code> / <code>save_settings()</code></td><td>读写设置</td></tr>
+    <tr><td>Rust → 前端</td><td><code>reminder-fired</code></td><td>到点提醒（带升级等级）</td></tr>
+    <tr><td>Rust → 前端</td><td><code>user-away</code> / <code>user-back</code></td><td>离开 / 回来，切换睡觉状态</td></tr>
+    <tr><td>Rust → 前端</td><td><code>drink-recorded</code></td><td>从托盘记一杯时同步给宠物窗口</td></tr>
+    <tr><td>Rust → 前端</td><td><code>settings-changed</code></td><td>设置变化后实时生效</td></tr>
+  </table>
+</section>
+
+<!-- ================= 11. 性能与质量 ================= -->
+<section id="nfr">
+  <h2>11. 性能与质量目标</h2>
+  <div class="grid cols-4">
+    <div class="metric"><div class="value">&lt; 10 MB</div><div class="label">安装包体积</div></div>
+    <div class="metric"><div class="value">&lt; 100 MB</div><div class="label">内存（含 WebView2 + WebGL）</div></div>
+    <div class="metric"><div class="value">&lt; 2%</div><div class="label">散步时 CPU（睡觉时 &lt; 0.5%）</div></div>
+    <div class="metric"><div class="value">&lt; 1 秒</div><div class="label">启动到猫出现</div></div>
+  </div>
+  <table style="margin-top:16px">
+    <tr><th>方面</th><th>要求</th></tr>
+    <tr><td>渲染</td><td>WebGL 画布只有猫那么大（约 240×240）；散步时 30 帧、睡觉 10 帧；静止时降帧；集成显卡也能流畅运行</td></tr>
+    <tr><td>空地计算</td><td>只在窗口布局变化时重算（事件驱动，不轮询），一次计算不超过 2 毫秒</td></tr>
+    <tr><td>高 DPI</td><td>支持 100%–200% 系统缩放，按设备像素比渲染，3D 不糊</td></tr>
+    <tr><td>多显示器</td><td>可以拎到任意显示器；显示器拔掉后自动回到主屏</td></tr>
+    <tr><td>数据安全</td><td>SQLite WAL 模式，异常退出不丢记录；不联网、不收集任何数据</td></tr>
+    <tr><td>权限</td><td>Tauri capabilities 最小权限白名单，前端只能调用列出的命令</td></tr>
+    <tr><td>稳定性</td><td>连续运行 7 天无内存泄漏、提醒不漂移</td></tr>
+  </table>
+</section>
+
+<!-- ================= 12. 里程碑 ================= -->
+<section id="milestone">
+  <h2>12. 开发里程碑</h2>
+  <table>
+    <tr><th>阶段</th><th>内容</th><th>验收标准</th></tr>
+    <tr><td>第 0 步：环境</td><td>升级 Rust、安装 Tauri CLI</td><td><code>cargo tauri info</code> 全部通过</td></tr>
+    <tr><td>第 1 步：搭骨架</td><td>Tauri 2 + Vue 项目，透明置顶小窗口里显示 3D 黑猫（把小样的模型代码移植过来）</td><td>桌面上出现会呼吸眨眼的煤球，背景透明</td></tr>
+    <tr><td>第 2 步：能散步</td><td>F01–F04、F30–F32、F09、F10</td><td>在真实桌面上绕开窗口散步、窗口压过来会躲、能点穿、能拎起来、能从托盘隐藏/退出</td></tr>
+    <tr><td>第 3 步：会提醒（MVP）</td><td>F05–F08</td><td>到点跑过来提醒、打卡、稍后提醒全流程可用</td></tr>
+    <tr><td>第 4 步：有灵魂</td><td>F12、F13、F19、F22、F33，全部动作与台词</td><td>各状态切换自然，没有闪烁和滑步</td></tr>
+    <tr><td>第 5 步：可配置</td><td>F11、F14–F18、F20、F21、F23、F24</td><td>所有设置立即生效，重启后保持</td></tr>
+    <tr><td>第 6 步：打包</td><td>NSIS 安装包、图标、版本信息</td><td>在干净的 Win10 / Win11 上安装、运行、卸载正常</td></tr>
+    <tr><td>第 7 步（可选）</td><td>F25–F29、F34</td><td>—</td></tr>
+  </table>
+</section>
+
+<!-- ================= 14. 声音设计 ================= -->
+<section id="voice">
+  <h2>14. 声音设计</h2>
+  <h3>14.1 两层声音</h3>
+  <table>
+    <tr><th>层</th><th>内容</th><th>实现</th></tr>
+    <tr><td>猫叫声</td><td>提醒"喵～～"、打招呼"喵"、被抓包"喵？"（尾音上扬）、被吓"喵嗷！"、被拎起抗议、被摸"呼噜呼噜"</td><td>Web Audio 实时合成（锯齿波 + 共振峰滤波 + 颤音；呼噜 = 低频噪声 + 25Hz 起伏），不需要音频文件</td></tr>
+    <tr><td>说话</td><td>先喵一声，再用可爱的声音念出台词；气泡文字同步显示，相当于字幕</td><td>现在：系统语音合成（音调调高）。正式版：接入带音色、带情绪的语音服务</td></tr>
+  </table>
+
+  <h3>14.2 什么时候出声</h3>
+  <table>
+    <tr><th>时刻</th><th>声音</th><th>情绪</th></tr>
+    <tr><td>到点提醒</td><td>喵～～ + 说提醒台词（一定出声）</td><td>撒娇 coquettish</td></tr>
+    <tr><td>喝完水 / 达标</td><td>喵 + "呼噜呼噜～今天第 3 杯啦"</td><td>开心 happy</td></tr>
+    <tr><td>点"等一下嘛"</td><td>喵 + "哼！10 分钟后本喵还会回来的"</td><td>委屈 aggrieved</td></tr>
+    <tr><td>被叫醒</td><td>"喵…谁叫醒本喵的"</td><td>委屈 aggrieved</td></tr>
+    <tr><td>被摸</td><td>只呼噜，不说话</td><td>—</td></tr>
+    <tr><td>偷看</td><td><b>保持安静</b>；被抓包才"喵？"一声</td><td>惊讶 surprised</td></tr>
+    <tr><td>被吓 / 被拎起</td><td>只有猫叫</td><td>—</td></tr>
+  </table>
+
+  <h3>14.3 不打扰规则</h3>
+  <table>
+    <tr><th>规则</th><th>说明</th></tr>
+    <tr><td>说话冷却</td><td>非提醒类的说话至少间隔 6 秒，不唠叨</td></tr>
+    <tr><td>开会自动静音</td><td>检测到麦克风正在被使用（腾讯会议、Teams 等通话中），只显示文字不出声</td></tr>
+    <tr><td>全屏 / 勿扰时段</td><td>默认只出猫叫、不说话（可设置）</td></tr>
+    <tr><td>声音模式</td><td>猫叫 + 说话 / 只有猫叫 / 静音，托盘和右键菜单一键切换</td></tr>
+  </table>
+
+  <h3>14.4 预生成语音（已完成 ✅）</h3>
+  <table>
+    <tr><th>项目</th><th>内容</th></tr>
+    <tr><td>音色</td><td><b>萌丫头（童声女）</b> <code>zh_female_mengyatou_uranus_bigtts</code>，火山 seed-tts-2.0；试听对比见 <a href="voice/audition.html" target="_blank">voice/audition.html</a></td></tr>
+    <tr><td>台词</td><td>46 句（提醒、口渴、生气、第 1~12 杯、达标、稍后、睡醒、偷看被抓包、被吓、被拎起、切换模式……），共 1.3MB</td></tr>
+    <tr><td>离线</td><td>构建时生成 mp3 打包进安装包，运行时不联网、无延迟；缺文件时退回系统语音</td></tr>
+    <tr><td>生成工具</td><td><code>tools/voice-generator/</code>：<code>voice-lines.json</code>（台词 + 情绪）+ <code>generate-voice-lines.mjs</code>（批量生成，密钥只从环境变量读取）</td></tr>
+  </table>
+  <table>
+    <tr><th>情绪</th><th>语气提示（传给 context_texts）</th><th>语速</th></tr>
+    <tr><td>撒娇（提醒）</td><td>撒娇、软萌、黏人，声音甜甜的，尾音稍微拖长</td><td>-8</td></tr>
+    <tr><td>开心（喝水）</td><td>开心、雀跃、奶声奶气</td><td>+6</td></tr>
+    <tr><td>得意（达标）</td><td>得意洋洋、骄傲又可爱</td><td>0</td></tr>
+    <tr><td>委屈（稍后）</td><td>委屈、傲娇、小声嘟囔</td><td>-6</td></tr>
+    <tr><td>惊讶（被抓包/被吓）</td><td>被吓一跳、慌慌张张又可爱</td><td>+12</td></tr>
+    <tr><td>害羞（偷看被摸）</td><td>害羞、小小声、甜甜的</td><td>-12</td></tr>
+    <tr><td>睡醒</td><td>刚睡醒、迷迷糊糊、懒洋洋，像在打哈欠</td><td>-20</td></tr>
+    <tr><td>偷偷摸摸</td><td>压低声音、神秘兮兮</td><td>-10</td></tr>
+    <tr><td>生气（多次忽略）</td><td>气鼓鼓、奶凶奶凶</td><td>+8</td></tr>
+  </table>
+  <div class="note">⚠️ 现在用的是<b>测试环境</b>的接口账号，只适合小样和课程演示。正式发布前用正式账号重新跑一遍生成脚本即可，代码不用改。新增台词：往 <code>voice-lines.json</code> 加一条再运行脚本，已生成的会自动跳过。</div>
+
+  <h3>14.5 以后的动态语音（AI 对话等）</h3>
+  <table>
+    <tr><th>环节</th><th>设计</th></tr>
+    <tr><td>统一接口</td><td><code>VoiceProvider.synthesize(text, { emotion, voiceId }) → 音频</code>；系统语音、你的语音服务都实现这个接口，随时切换</td></tr>
+    <tr><td>固定台词</td><td>所有固定台词（每句都标好情绪）提前生成好，缓存到本地，离线也能播放，没有延迟</td></tr>
+    <tr><td>动态台词</td><td>"今天第 N 杯"之类的句子按需生成并缓存；以后的 AI 对话用流式合成</td></tr>
+    <tr><td>密钥安全</td><td>API Key 只放在 Rust 后端，从环境变量 / 系统凭据读取，<b>不写进代码</b>，前端拿不到</td></tr>
+    <tr><td>失败兜底</td><td>语音服务连不上时自动退回系统语音或只有猫叫</td></tr>
+  </table>
+</section>
+
+<!-- ================= 15. 扩展技能架构 ================= -->
+<section id="skills">
+  <h2>15. 扩展技能架构（为截屏、AI 对话等预留）</h2>
+  <p>煤球现在只是宠物，但以后会加很多"技能"。所以从第一版起，所有能力都通过<b>技能注册表</b>接入：</p>
+<div class="flow">// 每个技能一条记录，菜单、快捷键、以后的语音指令都从这里读取
+{
+  id: 'screenshot',            // 唯一标识
+  icon: '📷', label: '截屏',
+  group: 'tools',              // 菜单分组
+  isAvailable: () => true,     // 是否可用（比如需要联网的技能）
+  run: async (context) => {    // context 提供：猫（让它做动作、说话）、Rust 命令调用、设置
+    context.cat.say('咔嚓！');
+    await context.invoke('capture_screen');
+  },
+}</div>
+  <table>
+    <tr><th>以后可能的技能</th><th>和猫的互动</th></tr>
+    <tr><td>📷 截屏</td><td>猫跳起来"咔嚓"，截图后叼着缩略图跑过来</td></tr>
+    <tr><td>💬 AI 对话</td><td>在猫旁边弹出聊天框，猫用语音回答，说话时张嘴</td></tr>
+    <tr><td>📝 便签 / 待办</td><td>猫叼着便签条</td></tr>
+    <tr><td>🍅 番茄钟</td><td>猫趴着陪你专注，时间到伸懒腰提醒休息</td></tr>
+  </table>
+  <div class="note">现在的右键菜单已经按这个结构实现（见 3D 小样），截屏和 AI 对话先显示"即将推出"。</div>
+</section>
+
+<!-- ================= 13. 待确认 ================= -->
+<section id="todo">
+  <h2>13. 待确认 / 建议补充</h2>
+  <p>下面这些需要你拍板，或者是我建议考虑加上的功能：</p>
+  <ul class="checklist">
+    <li><b>默认值是否合适？</b>每 45 分钟提醒、每天 8 杯、每杯 250ml、工作时段 9:00–18:00、午休 12:00–13:30
+      <small>可以改成你自己的作息</small></li>
+    <li><b>猫的造型满意吗？</b>先玩一下 <a href="cat-3d-prototype.html" target="_blank">3D 小样</a>，告诉我哪里要改（比例、颜色、眼睛、动作快慢、走路频率……）
+      <small>也可以考虑以后换成 Sketchfab 上更精细的模型</small></li>
+    <li><b>听一下预生成的语音</b>：在 3D 小样里点"🔊 试听"、到点提醒、喝水，听听语气和语速合不合适
+      <small>哪句不满意告诉我，可以单独重新生成（例如 <code>--only=remind-01 --force</code>）</small></li>
+    <li><b>散步的"存在感"</b>：现在约一半时间在走，你觉得太闹还是刚好？
+      <small>对应设置里的"活跃度"，可以定一个默认值</small></li>
+    <li><b>P2 功能做哪些？</b>历史统计、成就徽章、配饰换装、爬窗口、跨显示器散步、节日彩蛋
+      <small>建议 MVP 完成后再决定</small></li>
+    <li><b>全局快捷键记一杯</b>（例如 <code>Ctrl+Alt+W</code>）
+      <small>不用找猫，按一下就记录，适合全屏工作时</small></li>
+    <li><b>按体重推荐每日目标</b>（体重 kg × 30ml）
+      <small>首次启动时问一次，更科学</small></li>
+    <li><b>首次启动引导</b>
+      <small>煤球自我介绍 + 教你拖拽、双击、右键的用法</small></li>
+    <li><b>饮品类型</b>（水 / 茶 / 咖啡 / 牛奶）
+      <small>咖啡可以按一定比例折算，会让功能更复杂，建议放 P2</small></li>
+    <li><b>数据导出</b>（CSV）
+      <small>方便自己做分析</small></li>
+    <li><b>自动更新</b>（tauri-plugin-updater）
+      <small>需要一个放更新包的地方（例如 GitHub Releases）；只自己用的话可以不做</small></li>
+    <li><b>猫咪名字</b>：就叫「煤球」，还是你想取别的名字？</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>煤球 · 桌面喝水黑猫 — 功能设计文档 v0.3</footer>
+
+</body>
+</html>

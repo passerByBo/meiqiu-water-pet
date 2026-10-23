@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "猫咪窗口和设置窗口的权限（最小权限原则）",
+  "windows": ["pet", "settings", "statistics"],
+  "permissions": [
+    "core:default",
+    "core:menu:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close"
+  ]
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>煤球 · 音色试听</title>
+<style>
+  body { font-family: "Microsoft YaHei UI", system-ui, sans-serif; background: #1f1f24; color: #eee; margin: 0; padding: 40px 20px; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 24px; }
+  .sample-text { color: #c9e84a; font-size: 18px; margin-bottom: 24px; }
+  .voice-card { background: #2b2b33; border-radius: 12px; padding: 16px 20px; margin: 14px 0; }
+  .voice-card h2 { margin: 0 0 4px; font-size: 17px; }
+  .voice-card p { margin: 0 0 10px; color: #9a9aa8; font-size: 13px; }
+  .voice-card .speaker-id { font-family: Consolas, monospace; font-size: 12px; color: #777; }
+  audio { width: 100%; }
+  .recommended { border: 2px solid #c9e84a; }
+  .tag { background: #c9e84a; color: #1f1f24; border-radius: 8px; padding: 0 6px; font-size: 12px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🐾 煤球 · 音色试听</h1>
+  <div class="sample-text">"喵～两脚兽，该喝水啦！"（语气：撒娇、软萌、黏人的小猫咪）</div>
+
+  <div class="voice-card recommended">
+    <h2>萌丫头（童声女）<span class="tag">推荐</span></h2>
+    <p>奶声奶气，最像一只会说话的小猫</p>
+    <audio controls src="audition/zh_female_mengyatou_uranus_bigtts.mp3"></audio>
+    <div class="speaker-id">zh_female_mengyatou_uranus_bigtts</div>
+  </div>
+
+  <div class="voice-card">
+    <h2>邻家女孩（少年女）</h2>
+    <p>清甜的少女音，比童声成熟一点</p>
+    <audio controls src="audition/zh_female_linjianvhai_uranus_bigtts.mp3"></audio>
+    <div class="speaker-id">zh_female_linjianvhai_uranus_bigtts</div>
+  </div>
+
+  <div class="voice-card">
+    <h2>vv（成人女）</h2>
+    <p>温柔的成年女声，接口示例里的默认音色</p>
+    <audio controls src="audition/zh_female_vv_uranus_bigtts.mp3"></audio>
+    <div class="speaker-id">zh_female_vv_uranus_bigtts</div>
+  </div>
+</main>
+</body>
+</html>

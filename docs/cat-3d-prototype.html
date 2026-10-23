@@ -1,0 +1,2199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>煤球 · 3D 桌面散步小样</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: "Microsoft YaHei UI", system-ui, sans-serif; user-select: none; }
+
+  /* ========== 模拟桌面 ========== */
+  #desktop {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 30% 20%, #4b6a8f 0%, #2c3e57 45%, #1b2333 100%);
+  }
+  #desktop.wallpaper-light { background: radial-gradient(ellipse at 30% 20%, #ffffff 0%, #e4ebf3 60%, #cdd8e6 100%); }
+  #desktop.wallpaper-dark { background: #0d0d10; }
+
+  .fake-window {
+    position: absolute; background: #fff; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35); display: flex; flex-direction: column;
+    border: 1px solid rgba(0,0,0,.2);
+  }
+  .fake-window.maximized, .fake-window.fullscreen { border-radius: 0; border: 0; }
+  .fake-window.fullscreen .titlebar { display: none; }
+  .fake-window .titlebar {
+    height: 32px; flex: none; display: flex; align-items: center; padding-left: 12px;
+    font-size: 12px; color: #333; background: #f3f3f3; cursor: default;
+  }
+  .fake-window .titlebar .title { flex: 1; }
+  .fake-window .titlebar button {
+    width: 44px; height: 32px; border: 0; background: transparent; font-size: 13px; cursor: pointer; color: #333;
+  }
+  .fake-window .titlebar button:hover { background: #e2e2e2; }
+  .fake-window .titlebar button.close:hover { background: #e81123; color: #fff; }
+  .fake-window .content { flex: 1; overflow: hidden; position: relative; }
+
+  /* 假应用内容 */
+  .app-excel .content {
+    background-image: linear-gradient(#e3e3e3 1px, transparent 1px), linear-gradient(90deg, #e3e3e3 1px, transparent 1px);
+    background-size: 72px 22px;
+  }
+  .app-excel .titlebar { background: #1e7145; color: #fff; }
+  .app-excel .titlebar button { color: #fff; }
+  .app-code .titlebar { background: #323233; color: #ccc; }
+  .app-code .titlebar button { color: #ccc; }
+  .app-code .content { background: #1e1e1e; padding: 12px 16px; font: 13px/1.7 Consolas, monospace; color: #9cdcfe; }
+  .app-code .content .keyword { color: #c586c0; } .app-code .content .string { color: #ce9178; } .app-code .content .comment { color: #6a9955; }
+  .app-chat .titlebar { background: #ededed; }
+  .app-chat .content { background: #f5f5f5; padding: 12px; }
+  .chat-line { max-width: 70%; padding: 6px 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; background: #fff; }
+  .chat-line.mine { background: #95ec69; margin-left: auto; }
+
+  /* 任务栏 */
+  #taskbar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 48px; z-index: 5000;
+    background: rgba(32, 32, 40, .92); backdrop-filter: blur(10px);
+    display: flex; align-items: center; padding: 0 12px; gap: 6px; color: #eee; font-size: 12px;
+  }
+  #taskbar .start { font-size: 20px; padding: 0 10px; }
+  #taskbar .app-button {
+    height: 36px; padding: 0 12px; border-radius: 6px; background: rgba(255,255,255,.08);
+    display: flex; align-items: center; cursor: pointer; border-bottom: 2px solid #6cb8ff;
+  }
+  #taskbar .app-button.minimized { border-bottom-color: transparent; opacity: .7; }
+  #taskbar .spacer { flex: 1; }
+  #taskbar .tray { display: flex; align-items: center; gap: 12px; }
+
+  /* 控制面板（也当作一个"窗口"障碍物；全屏时仍然显示在最上面方便操作） */
+  #controlPanel {
+    position: fixed; left: 16px; top: 16px; width: 310px; z-index: 5800;
+    background: rgba(255,255,255,.96); border-radius: 10px; padding: 12px 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.3); font-size: 13px; color: #333;
+  }
+  #controlPanel h3 { margin: 0 0 8px; font-size: 15px; }
+  #controlPanel .button-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #controlPanel button {
+    border: 1px solid #ddd; background: #fafafa; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;
+  }
+  #controlPanel button:hover { border-color: #3a7bd5; color: #3a7bd5; }
+  #controlPanel .status { background: #f3f5f8; border-radius: 6px; padding: 6px 8px; line-height: 1.7; margin: 6px 0; }
+  #controlPanel .tips { color: #777; font-size: 12px; line-height: 1.6; }
+  #controlPanel label { cursor: pointer; margin-right: 10px; }
+
+  /* 猫咪画布：只有猫那么大，跟着猫移动；本身不接收鼠标事件（模拟点击穿透） */
+  #catCanvas { position: fixed; left: 0; top: 0; z-index: 6000; pointer-events: none; will-change: transform; }
+  #freeSpaceOverlay { position: fixed; inset: 0; z-index: 3500; pointer-events: none; }
+
+  /* 对话气泡 */
+  #speechBubble {
+    position: fixed; z-index: 7000; width: 230px; background: #fff; color: #333; border-radius: 14px;
+    padding: 12px 14px; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    opacity: 0; transform: translateY(6px) scale(.96); transition: opacity .2s, transform .2s; pointer-events: none;
+  }
+  #speechBubble.visible { opacity: 1; transform: none; pointer-events: auto; }
+  #speechBubble::after {
+    content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -8px;
+    border: 8px solid transparent; border-top-color: #fff; border-bottom: 0;
+  }
+  #speechBubble .actions { display: flex; gap: 8px; margin-top: 10px; }
+  #speechBubble button { flex: 1; border: 0; border-radius: 8px; padding: 6px 0; cursor: pointer; font-size: 13px; }
+  #speechBubble .primary { background: #4fb4f5; color: #fff; font-weight: bold; }
+  #speechBubble .secondary { background: #eee; color: #555; }
+
+  /* 技能菜单（右键猫） */
+  #skillMenu {
+    position: fixed; z-index: 8000; min-width: 210px; background: rgba(36,36,44,.97); color: #eee;
+    border-radius: 10px; padding: 6px 0; font-size: 13px; box-shadow: 0 10px 28px rgba(0,0,0,.35); display: none;
+  }
+  #skillMenu.visible { display: block; }
+  #skillMenu .menu-title { padding: 4px 14px 6px; color: #9a9aa8; font-size: 12px; }
+  #skillMenu .menu-item { padding: 7px 14px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  #skillMenu .menu-item:hover { background: rgba(255,255,255,.1); }
+  #skillMenu .menu-item .check { margin-left: auto; color: #6cb8ff; }
+  #skillMenu .menu-item.coming-soon { color: #888; }
+  #skillMenu .menu-item .badge { margin-left: auto; font-size: 11px; background: #4a4a58; color: #ccc; border-radius: 8px; padding: 0 6px; }
+  #skillMenu hr { border: 0; border-top: 1px solid #44444f; margin: 4px 0; }
+
+  /* 漂浮的小特效（爱心、Zzz、喵、👀） */
+  .floating-effect {
+    position: fixed; z-index: 6500; pointer-events: none; font-size: 18px; font-weight: bold; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6); animation: float-away 1.6s ease-out forwards;
+  }
+  @keyframes float-away {
+    0% { opacity: 0; transform: translate(0, 6px) scale(.8); }
+    20% { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--drift-x, 10px), -46px) scale(1.1); }
+  }
+  #loadingTip { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); color: #fff; z-index: 9000; }
+</style>
+<!-- 预生成的台词语音清单（没有这个文件时自动退回系统语音） -->
+<script src="../public/voice/voice-manifest.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+
+<div id="desktop"></div>
+<canvas id="freeSpaceOverlay"></canvas>
+<canvas id="catCanvas"></canvas>
+<div id="speechBubble">
+  <div id="speechText"></div>
+  <div class="actions" id="speechActions">
+    <button class="primary" id="drankButton">喝完啦 💧</button>
+    <button class="secondary" id="snoozeButton">等一下嘛</button>
+  </div>
+</div>
+<div id="skillMenu"></div>
+<div id="loadingTip">正在加载 3D 引擎…</div>
+
+<div id="controlPanel">
+  <h3>🐾 煤球 · 3D 桌面散步小样</h3>
+  <div class="button-row">
+    <button id="remindButton">⏰ 到点提醒</button>
+    <button id="peekButton">👀 去偷看</button>
+    <button id="sleepButton">💤 模拟离开</button>
+    <button id="wakeButton">☀ 叫醒</button>
+  </div>
+  <div class="button-row">
+    <button id="newWindowButton">➕ 新建窗口</button>
+    <button id="maximizeAllButton">⬜ 全部最大化</button>
+    <button id="restoreAllButton">↺ 还原窗口</button>
+    <button id="fullscreenButton">🖥 模拟全屏应用</button>
+  </div>
+  <div class="button-row">
+    <button data-wallpaper="">壁纸：默认</button>
+    <button data-wallpaper="wallpaper-dark">纯黑</button>
+    <button data-wallpaper="wallpaper-light">浅色</button>
+  </div>
+  <div class="button-row" style="align-items:center">
+    <label><input type="checkbox" id="voiceEnabledCheckbox" checked> 🔊 声音</label>
+    <select id="voiceModeSelect" style="font-size:12px">
+      <option value="full">猫叫 + 说话</option>
+      <option value="meowOnly">只有猫叫</option>
+    </select>
+    <button id="voiceTestButton">试听</button>
+  </div>
+  <label><input type="checkbox" id="showFreeSpaceCheckbox"> 显示空闲区域和路线</label>
+  <div class="status" id="statusText">—</div>
+  <div class="tips">
+    单击猫：摸摸 · 双击：记一杯水 · 按住：拎起来放到别处 · <b>右键：技能菜单</b><br>
+    鼠标慢慢靠近它会好奇地看你，猛冲过去会吓跑它<br>
+    偷看时把鼠标移到它头上，它会被"抓包"缩回去<br>
+    放到窗口上它就待在那儿；放到屏幕底边它就沿边缘溜达
+  </div>
+</div>
+
+<div id="taskbar">
+  <span class="start">⊞</span>
+  <div id="taskbarApps" style="display:flex;gap:6px"></div>
+  <span class="spacer"></span>
+  <div class="tray">
+    <span id="trayProgress">🐾 0/8</span>
+    <span>中</span>
+    <span id="trayClock">15:00</span>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+// =====================================================================
+// 常量配置
+// =====================================================================
+const TASKBAR_HEIGHT = 48;
+const CAT_CANVAS_SIZE = 240;          // 猫咪画布大小（像素）
+const GRID_CELL_SIZE = 24;            // 空闲区域网格大小（像素）
+const CAT_FOOTPRINT = { halfWidth: 66, heightAbove: 118, depthBelow: 12 }; // 猫在桌面上占的区域（相对脚底中心点）
+const OBSTACLE_MARGIN = 6;            // 与窗口保持的距离
+const WALK_SPEED = 62;                // 散步速度（像素/秒）
+const SNEAK_SPEED = 40;               // 蹑手蹑脚的速度
+const RUN_SPEED = 210;                // 奔跑速度
+const STRIDE_LENGTH = 46;             // 一个完整步伐对应的移动距离（像素），用来避免"滑步"
+const ACTIVE_FPS = 30;                // 正常渲染帧率
+const SLEEP_FPS = 10;                 // 睡觉时降低帧率省电
+const SCARE_CURSOR_SPEED = 1400;      // 鼠标冲过来的速度超过这个值会吓到猫（像素/秒）
+const PEEK_DUCK_CURSOR_SPEED = 900;   // 偷看时，鼠标冲过来超过这个速度就缩回去
+const PEEK_SIDE_DEPTH = 52;           // 从窗口侧边探头时，脚底藏在边线内多少像素
+const PEEK_UP_DEPTH = 40;             // 从上边沿探头时，脚底藏在边线下多少像素（露出脑袋和扒着边沿的两只爪子）
+const DAILY_GOAL_CUPS = 8;
+
+const randomBetween = (min, max) => min + Math.random() * (max - min);
+const pickRandom = list => list[Math.floor(Math.random() * list.length)];
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+// 按指数衰减向目标靠近，与帧率无关
+const damp = (current, target, rate, deltaSeconds) => current + (target - current) * (1 - Math.exp(-rate * deltaSeconds));
+// 角度插值时走最短的方向
+const dampAngle = (current, target, rate, deltaSeconds) => {
+  let difference = target - current;
+  difference = Math.atan2(Math.sin(difference), Math.cos(difference));
+  return current + difference * (1 - Math.exp(-rate * deltaSeconds));
+};
+const rectanglesOverlap = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+const rectangleContains = (outer, inner) => inner.left >= outer.left && inner.right <= outer.right && inner.top >= outer.top && inner.bottom <= outer.bottom;
+const pointInRectangle = (x, y, rect) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+
+// =====================================================================
+// 1. 模拟桌面：假窗口、任务栏、全屏应用
+// =====================================================================
+class DesktopSimulator {
+  constructor(onLayoutChange) {
+    this.desktopElement = document.getElementById('desktop');
+    this.taskbarElement = document.getElementById('taskbar');
+    this.taskbarAppsElement = document.getElementById('taskbarApps');
+    this.windows = [];
+    this.topZIndex = 10;
+    this.lastActiveWindow = null;
+    this.onLayoutChange = onLayoutChange;
+  }
+
+  get hasFullscreenWindow() {
+    return this.windows.some(item => item.isFullscreen && !item.isMinimized);
+  }
+
+  // 工作区：全屏应用会盖住任务栏，此时工作区就是整个屏幕
+  get workArea() {
+    const bottom = this.hasFullscreenWindow ? window.innerHeight : window.innerHeight - TASKBAR_HEIGHT;
+    return { left: 0, top: 0, right: window.innerWidth, bottom };
+  }
+
+  get taskbarRect() {
+    if (this.hasFullscreenWindow) return null;
+    return { left: 0, top: window.innerHeight - TASKBAR_HEIGHT, right: window.innerWidth, bottom: window.innerHeight };
+  }
+
+  get visibleWindows() {
+    return this.windows.filter(item => !item.isMinimized);
+  }
+
+  createWindow({ title, appClass, contentHtml, left, top, width, height }) {
+    const windowElement = document.createElement('div');
+    windowElement.className = `fake-window ${appClass}`;
+    windowElement.innerHTML = `
+      <div class="titlebar"><span class="title">${title}</span>
+        <button class="minimize">—</button><button class="maximize">□</button><button class="close">✕</button>
+      </div>
+      <div class="content">${contentHtml}</div>`;
+    this.desktopElement.appendChild(windowElement);
+
+    const windowState = {
+      element: windowElement, title, rect: { left, top, width, height },
+      isMaximized: false, isMinimized: false, isFullscreen: false,
+    };
+    this.windows.push(windowState);
+    this.applyRect(windowState);
+    this.bringToFront(windowState);
+    this.bindWindowEvents(windowState);
+    this.renderTaskbar();
+    this.onLayoutChange();
+    return windowState;
+  }
+
+  applyRect(windowState) {
+    let rect = windowState.rect;
+    if (windowState.isFullscreen) rect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    else if (windowState.isMaximized) rect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight - TASKBAR_HEIGHT };
+    Object.assign(windowState.element.style, {
+      left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px',
+      display: windowState.isMinimized ? 'none' : 'flex',
+    });
+    windowState.element.classList.toggle('maximized', windowState.isMaximized);
+    windowState.element.classList.toggle('fullscreen', windowState.isFullscreen);
+    // 全屏应用盖在任务栏上面
+    if (windowState.isFullscreen) windowState.element.style.zIndex = 5500;
+  }
+
+  bringToFront(windowState) {
+    this.lastActiveWindow = windowState;
+    if (!windowState.isFullscreen) windowState.element.style.zIndex = ++this.topZIndex;
+  }
+
+  bindWindowEvents(windowState) {
+    const titlebar = windowState.element.querySelector('.titlebar');
+    windowState.element.addEventListener('pointerdown', () => this.bringToFront(windowState));
+
+    // 拖动标题栏移动窗口
+    titlebar.addEventListener('pointerdown', event => {
+      if (event.target.tagName === 'BUTTON' || windowState.isMaximized) return;
+      const startX = event.clientX, startY = event.clientY;
+      const startLeft = windowState.rect.left, startTop = windowState.rect.top;
+      const handleMove = moveEvent => {
+        windowState.rect.left = startLeft + moveEvent.clientX - startX;
+        windowState.rect.top = Math.max(0, startTop + moveEvent.clientY - startY);
+        this.applyRect(windowState);
+        this.onLayoutChange();
+      };
+      const handleUp = () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+      };
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+    });
+    titlebar.addEventListener('dblclick', () => this.toggleMaximize(windowState));
+    windowState.element.querySelector('.minimize').addEventListener('click', () => this.setMinimized(windowState, true));
+    windowState.element.querySelector('.maximize').addEventListener('click', () => this.toggleMaximize(windowState));
+    windowState.element.querySelector('.close').addEventListener('click', () => this.closeWindow(windowState));
+  }
+
+  toggleMaximize(windowState, forceValue) {
+    windowState.isMaximized = forceValue ?? !windowState.isMaximized;
+    this.applyRect(windowState);
+    this.onLayoutChange();
+  }
+
+  // 模拟 F11 全屏：盖住整个屏幕（包括任务栏）
+  toggleFullscreen(windowState) {
+    const isEntering = !windowState.isFullscreen;
+    this.windows.forEach(item => { item.isFullscreen = false; });
+    windowState.isFullscreen = isEntering;
+    if (isEntering) windowState.isMinimized = false;
+    this.windows.forEach(item => this.applyRect(item));
+    if (!isEntering) this.bringToFront(windowState);
+    this.taskbarElement.style.display = this.hasFullscreenWindow ? 'none' : '';
+    this.onLayoutChange();
+  }
+
+  setMinimized(windowState, isMinimized) {
+    windowState.isMinimized = isMinimized;
+    if (isMinimized) windowState.isFullscreen = false;
+    this.applyRect(windowState);
+    if (!isMinimized) this.bringToFront(windowState);
+    this.taskbarElement.style.display = this.hasFullscreenWindow ? 'none' : '';
+    this.renderTaskbar();
+    this.onLayoutChange();
+  }
+
+  closeWindow(windowState) {
+    windowState.element.remove();
+    this.windows = this.windows.filter(item => item !== windowState);
+    this.taskbarElement.style.display = this.hasFullscreenWindow ? 'none' : '';
+    this.renderTaskbar();
+    this.onLayoutChange();
+  }
+
+  renderTaskbar() {
+    this.taskbarAppsElement.innerHTML = '';
+    for (const windowState of this.windows) {
+      const button = document.createElement('div');
+      button.className = 'app-button' + (windowState.isMinimized ? ' minimized' : '');
+      button.textContent = windowState.title.split(' ')[0];
+      button.addEventListener('click', () => this.setMinimized(windowState, !windowState.isMinimized));
+      this.taskbarAppsElement.appendChild(button);
+    }
+  }
+
+  // 返回所有挡住桌面的东西（可见窗口 + 控制面板），带上来源，方便排除某个窗口
+  getObstacles() {
+    const obstacles = [];
+    for (const windowState of this.visibleWindows) {
+      const rect = windowState.element.getBoundingClientRect();
+      obstacles.push({ windowState, rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } });
+    }
+    const panelRect = document.getElementById('controlPanel').getBoundingClientRect();
+    obstacles.push({ windowState: null, rect: { left: panelRect.left, top: panelRect.top, right: panelRect.right, bottom: panelRect.bottom } });
+    return obstacles;
+  }
+}
+
+// =====================================================================
+// 2. 空闲区域地图：把桌面切成网格，算出猫能站的格子，并做寻路
+// =====================================================================
+class FreeSpaceMap {
+  rebuild(workArea, obstacleRects) {
+    this.workArea = workArea;
+    this.obstacleRects = obstacleRects.map(rect => ({
+      left: rect.left - OBSTACLE_MARGIN, top: rect.top - OBSTACLE_MARGIN,
+      right: rect.right + OBSTACLE_MARGIN, bottom: rect.bottom + OBSTACLE_MARGIN,
+    }));
+    this.columnCount = Math.floor(workArea.right / GRID_CELL_SIZE);
+    this.rowCount = Math.floor(workArea.bottom / GRID_CELL_SIZE);
+    this.freeCells = new Uint8Array(this.columnCount * this.rowCount);
+    this.freeCellCount = 0;
+    for (let row = 0; row < this.rowCount; row++) {
+      for (let column = 0; column < this.columnCount; column++) {
+        const center = this.cellCenter(row * this.columnCount + column);
+        if (this.isPositionFree(center.x, center.y)) {
+          this.freeCells[row * this.columnCount + column] = 1;
+          this.freeCellCount++;
+        }
+      }
+    }
+  }
+
+  footprintAt(x, y) {
+    return { left: x - CAT_FOOTPRINT.halfWidth, right: x + CAT_FOOTPRINT.halfWidth, top: y - CAT_FOOTPRINT.heightAbove, bottom: y + CAT_FOOTPRINT.depthBelow };
+  }
+
+  // 猫的脚底站在 (x, y) 时，整只猫是否完全不碰窗口、也不出屏幕
+  isPositionFree(x, y) {
+    const footprint = this.footprintAt(x, y);
+    if (footprint.left < this.workArea.left || footprint.right > this.workArea.right ||
+        footprint.top < this.workArea.top || footprint.bottom > this.workArea.bottom) return false;
+    return !this.obstacleRects.some(rect => rectanglesOverlap(rect, footprint));
+  }
+
+  cellCenter(cellIndex) {
+    return {
+      x: (cellIndex % this.columnCount) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2,
+      y: Math.floor(cellIndex / this.columnCount) * GRID_CELL_SIZE + GRID_CELL_SIZE / 2,
+    };
+  }
+
+  cellIndexAt(x, y) {
+    const column = clamp(Math.floor(x / GRID_CELL_SIZE), 0, this.columnCount - 1);
+    const row = clamp(Math.floor(y / GRID_CELL_SIZE), 0, this.rowCount - 1);
+    return row * this.columnCount + column;
+  }
+
+  nearestFreeCell(x, y) {
+    let bestIndex = -1, bestDistance = Infinity;
+    for (let index = 0; index < this.freeCells.length; index++) {
+      if (!this.freeCells[index]) continue;
+      const center = this.cellCenter(index);
+      const distance = Math.hypot(center.x - x, center.y - y);
+      if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+    }
+    return bestIndex;
+  }
+
+  startCellFor(position) {
+    return this.isPositionFree(position.x, position.y)
+      ? this.cellIndexAt(position.x, position.y)
+      : this.nearestFreeCell(position.x, position.y);
+  }
+
+  // 广度优先搜索：从起点格子出发，算出到每个可达格子的步数和来源
+  breadthFirstSearch(startIndex) {
+    const distances = new Int32Array(this.freeCells.length).fill(-1);
+    const previous = new Int32Array(this.freeCells.length).fill(-1);
+    if (startIndex < 0) return { distances, previous };
+    const queue = [startIndex];
+    distances[startIndex] = 0;
+    for (let head = 0; head < queue.length; head++) {
+      const current = queue[head];
+      const column = current % this.columnCount;
+      const neighbors = [current - this.columnCount, current + this.columnCount, column > 0 ? current - 1 : -1, column < this.columnCount - 1 ? current + 1 : -1];
+      for (const neighbor of neighbors) {
+        if (neighbor < 0 || neighbor >= this.freeCells.length || !this.freeCells[neighbor] || distances[neighbor] !== -1) continue;
+        distances[neighbor] = distances[current] + 1;
+        previous[neighbor] = current;
+        queue.push(neighbor);
+      }
+    }
+    return { distances, previous };
+  }
+
+  // 两点之间是否一路都是空地（用来把网格路线拉直）
+  hasClearLine(from, to) {
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    const sampleCount = Math.ceil(distance / 8);
+    for (let sample = 1; sample <= sampleCount; sample++) {
+      const ratio = sample / sampleCount;
+      if (!this.isPositionFree(from.x + (to.x - from.x) * ratio, from.y + (to.y - from.y) * ratio)) return false;
+    }
+    return true;
+  }
+
+  // 生成一条从当前位置到目标格子的平滑路线（绕开窗口）
+  buildPath(fromPosition, searchResult, targetIndex) {
+    const cellChain = [];
+    for (let index = targetIndex; index !== -1; index = searchResult.previous[index]) cellChain.unshift(this.cellCenter(index));
+    const smoothedPath = [];
+    let anchor = fromPosition, cursor = 0;
+    while (cursor < cellChain.length) {
+      let farthest = cursor;
+      for (let probe = cellChain.length - 1; probe > cursor; probe--) {
+        if (this.hasClearLine(anchor, cellChain[probe])) { farthest = probe; break; }
+      }
+      smoothedPath.push(cellChain[farthest]);
+      anchor = cellChain[farthest];
+      cursor = farthest + 1;
+    }
+    return smoothedPath;
+  }
+
+  // 随机挑一个散步目的地；传入 avoidPoint 时尽量远离它（被吓跑）
+  planWander(fromPosition, avoidPoint = null) {
+    const startIndex = this.startCellFor(fromPosition);
+    if (startIndex < 0) return null;
+    const searchResult = this.breadthFirstSearch(startIndex);
+    let candidates = [];
+    for (let index = 0; index < searchResult.distances.length; index++) {
+      const steps = searchResult.distances[index];
+      if (steps >= 4 && steps <= 28) candidates.push(index);
+    }
+    if (!candidates.length) {
+      for (let index = 0; index < searchResult.distances.length; index++) if (searchResult.distances[index] > 0) candidates.push(index);
+    }
+    if (!candidates.length) return null;
+    if (avoidPoint) {
+      const distanceFromAvoid = index => { const center = this.cellCenter(index); return Math.hypot(center.x - avoidPoint.x, center.y - avoidPoint.y); };
+      candidates.sort((a, b) => distanceFromAvoid(b) - distanceFromAvoid(a));
+      candidates = candidates.slice(0, Math.max(1, Math.floor(candidates.length * 0.15)));
+    }
+    return this.buildPath(fromPosition, searchResult, pickRandom(candidates));
+  }
+
+  // 找一个离 focusPoint 约 preferredDistance 像素的可达空地
+  planToward(fromPosition, focusPoint, preferredDistance) {
+    const startIndex = this.startCellFor(fromPosition);
+    if (startIndex < 0) return null;
+    const searchResult = this.breadthFirstSearch(startIndex);
+    let bestIndex = startIndex, bestScore = Infinity;
+    for (let index = 0; index < searchResult.distances.length; index++) {
+      if (searchResult.distances[index] < 0) continue;
+      const center = this.cellCenter(index);
+      const score = Math.abs(Math.hypot(center.x - focusPoint.x, center.y - focusPoint.y) - preferredDistance);
+      if (score < bestScore) { bestScore = score; bestIndex = index; }
+    }
+    return this.buildPath(fromPosition, searchResult, bestIndex);
+  }
+}
+
+// =====================================================================
+// 3. 偷看规划：找"藏身处"（窗口侧边/顶边、任务栏、屏幕边缘），算出藏、探头的各个位置
+// =====================================================================
+// 藏身处描述：{ kind, exit, along, windowState? }
+//   kind: window | taskbar | screenBottom | screenLeft | screenRight
+//   exit: 脑袋从哪边探出来 left | right | up
+//   along: 沿边线的位置（窗口用 0~1 的比例，其它用像素坐标）
+class PeekPlanner {
+  constructor(desktop, freeSpaceMap) {
+    this.desktop = desktop;
+    this.freeSpaceMap = freeSpaceMap;
+  }
+
+  // 挡住猫身体的那块区域；藏身处失效时返回 null
+  coverRectOf(spot) {
+    const far = 100000;
+    switch (spot.kind) {
+      case 'window': {
+        const windowState = spot.windowState;
+        if (!this.desktop.windows.includes(windowState) || windowState.isMinimized || windowState.isMaximized || windowState.isFullscreen) return null;
+        const rect = windowState.element.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      }
+      case 'taskbar': {
+        const taskbarRect = this.desktop.taskbarRect;
+        return taskbarRect ? { left: -far, right: far, top: taskbarRect.top, bottom: far } : null;
+      }
+      case 'screenBottom': return { left: -far, right: far, top: window.innerHeight, bottom: far };
+      case 'screenLeft': return { left: -far, right: 0, top: -far, bottom: far };
+      case 'screenRight': return { left: window.innerWidth, right: far, top: -far, bottom: far };
+    }
+    return null;
+  }
+
+  // 算出偷看过程中的关键位置
+  //   stagingPoint：藏之前站的位置（在外面）
+  //   tailOutPoint：钻进去一半，尾巴还露在外面（藏头露尾）
+  //   hiddenPoint：完全藏好
+  //   peekPoint：探出半个脑袋
+  geometryOf(spot) {
+    const cover = this.coverRectOf(spot);
+    if (!cover) return null;
+    if (spot.exit === 'left' || spot.exit === 'right') {
+      const direction = spot.exit === 'left' ? -1 : 1;
+      const edgeX = spot.exit === 'left' ? cover.left : cover.right;
+      const y = spot.kind === 'window' ? cover.top + spot.along * (cover.bottom - cover.top) : spot.along;
+      const pointAt = offset => ({ x: edgeX + direction * offset, y });
+      return {
+        cover, exit: spot.exit, direction, anchor: { x: edgeX, y },
+        stagingPoint: pointAt(88), tailOutPoint: pointAt(-78), hiddenPoint: pointAt(-150), peekPoint: pointAt(-PEEK_SIDE_DEPTH),
+        outYaw: direction * 1.05, inYaw: -direction * Math.PI / 2,
+        headPosition: { x: edgeX + direction * 32, y: y - 80 },
+        headArea: { left: direction < 0 ? edgeX - 90 : edgeX, right: direction < 0 ? edgeX : edgeX + 90, top: y - 140, bottom: y },
+        bodyArea: { left: direction < 0 ? edgeX : edgeX - 175, right: direction < 0 ? edgeX + 175 : edgeX, top: y - 140, bottom: y + 15 },
+      };
+    }
+    const edgeY = cover.top;
+    const x = spot.kind === 'window' ? cover.left + spot.along * (cover.right - cover.left) : spot.along;
+    const pointAt = offset => ({ x, y: edgeY + offset });
+    return {
+      cover, exit: 'up', direction: 0, anchor: { x, y: edgeY },
+      stagingPoint: pointAt(spot.kind === 'window' ? -20 : -2), tailOutPoint: pointAt(100), hiddenPoint: pointAt(190), peekPoint: pointAt(PEEK_UP_DEPTH),
+      outYaw: 0, inYaw: 0,
+      headPosition: { x, y: edgeY - 40 },
+      headArea: { left: x - 75, right: x + 75, top: edgeY - 95, bottom: edgeY },
+      bodyArea: { left: x - 85, right: x + 85, top: edgeY, bottom: edgeY + 190 },
+    };
+  }
+
+  // 藏身处是否合适：脑袋探出去的地方要在屏幕内、不被别的窗口挡；身体要能完全藏进去
+  isSpotUsable(spot, geometry) {
+    const screenRect = { left: 0, top: 0, right: window.innerWidth, bottom: this.desktop.workArea.bottom };
+    if (!rectangleContains(screenRect, geometry.headArea)) return false;
+    // 没有空地时（例如全屏工作），猫浮在所有窗口上面，屏幕边缘的藏身处只需要避开控制面板
+    const isFloatingOverWindows = spot.kind !== 'window' && this.freeSpaceMap.freeCellCount === 0;
+    const blockers = this.desktop.getObstacles().filter(item => {
+      if (isFloatingOverWindows) return item.windowState === null;
+      return spot.kind !== 'window' || item.windowState !== spot.windowState;
+    });
+    if (blockers.some(item => rectanglesOverlap(item.rect, geometry.headArea))) return false;
+    if (spot.kind === 'window' && !rectangleContains(geometry.cover, geometry.bodyArea)) return false;
+    return true;
+  }
+
+  // 从当前位置出发，挑一个能走过去的藏身处，返回 { spot, path }
+  plan(fromPosition, isOnEdge, edgeLineY) {
+    const candidates = [];
+    const workArea = this.desktop.workArea;
+    for (const windowState of this.desktop.visibleWindows) {
+      if (windowState.isMaximized || windowState.isFullscreen) continue;
+      for (const along of [.45, .65, .85]) {
+        candidates.push({ kind: 'window', windowState, exit: 'left', along, weight: 2 });
+        candidates.push({ kind: 'window', windowState, exit: 'right', along, weight: 2 });
+      }
+      for (const along of [.3, .5, .7]) candidates.push({ kind: 'window', windowState, exit: 'up', along, weight: 2 });
+    }
+    const bottomKind = this.desktop.taskbarRect ? 'taskbar' : 'screenBottom';
+    for (let index = 0; index < 3; index++) {
+      candidates.push({ kind: bottomKind, exit: 'up', along: randomBetween(160, workArea.right - 160), weight: 1 });
+    }
+    const sideHeights = isOnEdge ? [edgeLineY] : [edgeLineY, randomBetween(220, edgeLineY), randomBetween(220, edgeLineY)];
+    for (const y of sideHeights) {
+      candidates.push({ kind: 'screenLeft', exit: 'right', along: y, weight: 1 });
+      candidates.push({ kind: 'screenRight', exit: 'left', along: y, weight: 1 });
+    }
+
+    const searchResult = isOnEdge ? null : this.freeSpaceMap.breadthFirstSearch(this.freeSpaceMap.startCellFor(fromPosition));
+    const reachable = [];
+    for (const spot of candidates) {
+      const geometry = this.geometryOf(spot);
+      if (!geometry || !this.isSpotUsable(spot, geometry)) continue;
+      const path = this.pathToStaging(fromPosition, geometry.stagingPoint, isOnEdge, edgeLineY, searchResult);
+      if (path) reachable.push({ spot, path });
+    }
+    if (!reachable.length) return null;
+    // 按权重随机（窗口旁边更有"偷看主人"的感觉，权重更高）
+    const totalWeight = reachable.reduce((sum, item) => sum + item.spot.weight, 0);
+    let roll = Math.random() * totalWeight;
+    for (const item of reachable) {
+      roll -= item.spot.weight;
+      if (roll <= 0) return item;
+    }
+    return reachable[reachable.length - 1];
+  }
+
+  pathToStaging(fromPosition, stagingPoint, isOnEdge, edgeLineY, searchResult) {
+    if (isOnEdge) {
+      // 在边缘模式下只能沿着边线走过去
+      if (Math.abs(stagingPoint.y - edgeLineY) > 25) return null;
+      return [{ x: stagingPoint.x, y: edgeLineY }, stagingPoint];
+    }
+    const map = this.freeSpaceMap;
+    const centerCell = map.cellIndexAt(stagingPoint.x, stagingPoint.y);
+    let bestCell = -1, bestDistance = 40;
+    for (let rowOffset = -1; rowOffset <= 1; rowOffset++) {
+      for (let columnOffset = -1; columnOffset <= 1; columnOffset++) {
+        const cell = centerCell + rowOffset * map.columnCount + columnOffset;
+        if (cell < 0 || cell >= map.freeCells.length || searchResult.distances[cell] < 0) continue;
+        const center = map.cellCenter(cell);
+        const distance = Math.hypot(center.x - stagingPoint.x, center.y - stagingPoint.y);
+        if (distance < bestDistance) { bestDistance = distance; bestCell = cell; }
+      }
+    }
+    if (bestCell < 0) return null;
+    return [...map.buildPath(fromPosition, searchResult, bestCell), stagingPoint];
+  }
+}
+
+// =====================================================================
+// 4. 3D 黑猫模型：全部由代码搭建，所有动作由姿势参数驱动
+// =====================================================================
+
+// 关键姿势：每个姿势定义各关节角度，实际姿势是它们的加权混合
+const KEY_POSES = {
+  stand:   { hipsHeight: .46, hipsPitch: 0,    hipsShift: 0,    frontUpper: 0,     frontKnee: 0,   backUpper: 0,     backKnee: 0,   neckPitch: 0 },
+  sit:     { hipsHeight: .2,  hipsPitch: -.6,  hipsShift: -.1,  frontUpper: .6,    frontKnee: 0,   backUpper: -.45,  backKnee: 2.5, neckPitch: .5 },
+  lie:     { hipsHeight: .22, hipsPitch: .04,  hipsShift: 0,    frontUpper: -1.5,  frontKnee: .2,  backUpper: -1.2,  backKnee: 2.6, neckPitch: .2 },
+  stretch: { hipsHeight: .44, hipsPitch: .32,  hipsShift: -.05, frontUpper: -1.0,  frontKnee: 0,   backUpper: .15,   backKnee: 0,   neckPitch: -.3 },
+  lifted:  { hipsHeight: .3,  hipsPitch: -.9,  hipsShift: 0,    frontUpper: .9,    frontKnee: .15, backUpper: .9,    backKnee: .15, neckPitch: .65 },
+};
+const POSE_NAMES = Object.keys(KEY_POSES);
+const TAIL_SEGMENT_COUNT = 12;
+
+class BlackCatModel {
+  constructor() {
+    this.root = new THREE.Group();
+    this.blinkTimer = 2;
+    this.blinkAmount = 0;
+    this.earTwitchTimer = 3;
+    this.earTwitchSide = 1;
+    this.earTwitchAmount = 0;
+
+    // ---------- 材质 ----------
+    // 黑色毛发：哑光 + sheen（绒毛反光），配合轮廓光表现立体感
+    this.furMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x17171b, roughness: .78, sheen: 1, sheenColor: new THREE.Color(0x8796b3), sheenRoughness: .5,
+    });
+    const pinkMaterial = new THREE.MeshStandardMaterial({ color: 0xf29aac, roughness: .55 });
+    const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0xc9e84a, emissive: 0x8fae10, emissiveIntensity: .45, roughness: .12 });
+    const pupilMaterial = new THREE.MeshStandardMaterial({ color: 0x030303, roughness: .08 });
+    const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const mouthMaterial = new THREE.MeshStandardMaterial({ color: 0x4a1822, roughness: .7 });
+    const sphereGeometry = new THREE.SphereGeometry(1, 32, 24);
+    const ellipsoid = (material, radiusX, radiusY, radiusZ, x = 0, y = 0, z = 0) => {
+      const mesh = new THREE.Mesh(sphereGeometry, material);
+      mesh.scale.set(radiusX, radiusY, radiusZ);
+      mesh.position.set(x, y, z);
+      return mesh;
+    };
+
+    // ---------- 地面阴影 ----------
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = shadowCanvas.height = 64;
+    const shadowContext = shadowCanvas.getContext('2d');
+    const gradient = shadowContext.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(0,0,0,.55)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    shadowContext.fillStyle = gradient;
+    shadowContext.fillRect(0, 0, 64, 64);
+    this.shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.15, 1.75),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowCanvas), transparent: true, depthWrite: false })
+    );
+    this.shadow.rotation.x = -Math.PI / 2;
+    this.shadow.position.set(0, .005, .22);
+    this.shadow.raycast = () => {};
+    this.root.add(this.shadow);
+
+    // ---------- 身体（以后腰为支点，坐下时整个前身抬起） ----------
+    this.hips = new THREE.Group();
+    this.root.add(this.hips);
+    this.torso = ellipsoid(this.furMaterial, .36, .33, .46, 0, .1, .24);
+    this.hips.add(this.torso);
+    this.hips.add(ellipsoid(this.furMaterial, .35, .32, .3, 0, .08, .02)); // 圆滚滚的屁股
+
+    this.chest = new THREE.Group();
+    this.chest.position.set(0, .12, .52);
+    this.hips.add(this.chest);
+    this.chest.add(ellipsoid(this.furMaterial, .31, .32, .28, 0, 0, 0));
+
+    // ---------- 头部（Q 版：头放大 1.25 倍） ----------
+    this.neck = new THREE.Group();
+    this.neck.position.set(0, .18, .08);
+    this.chest.add(this.neck);
+    this.head = new THREE.Group();
+    this.head.position.set(0, .22, .08);
+    this.head.scale.setScalar(1.25);
+    this.neck.add(this.head);
+    this.head.add(ellipsoid(this.furMaterial, .36, .32, .33));
+    this.head.add(ellipsoid(this.furMaterial, .17, .14, .16, -.14, -.08, .12)); // 左脸颊
+    this.head.add(ellipsoid(this.furMaterial, .17, .14, .16, .14, -.08, .12));  // 右脸颊
+    this.head.add(ellipsoid(this.furMaterial, .12, .08, .08, 0, -.1, .27));     // 嘴筒
+    this.head.add(ellipsoid(pinkMaterial, .036, .025, .02, 0, -.045, .345));    // 粉鼻头
+    this.mouth = ellipsoid(mouthMaterial, .04, .004, .02, 0, -.15, .315);
+    this.head.add(this.mouth);
+
+    // 眼睛：眼球 + 竖瞳 + 高光，整组缩放实现眨眼和眯眼
+    this.eyes = [];
+    for (const side of [-1, 1]) {
+      const eyeGroup = new THREE.Group();
+      eyeGroup.position.set(side * .13, .04, .272);
+      eyeGroup.rotation.y = side * .3;
+      eyeGroup.add(ellipsoid(eyeMaterial, .092, .1, .05));
+      const pupil = ellipsoid(pupilMaterial, .03, .078, .02, 0, 0, .038);
+      eyeGroup.add(pupil);
+      eyeGroup.add(ellipsoid(highlightMaterial, .018, .018, .01, side * -.02 + .02, .04, .052));
+      this.head.add(eyeGroup);
+      this.eyes.push({ group: eyeGroup, pupil });
+    }
+
+    // 耳朵：外耳黑色 + 内耳粉色
+    this.ears = [];
+    const earGeometry = new THREE.ConeGeometry(.13, .28, 24);
+    earGeometry.translate(0, .14, 0);
+    const innerEarGeometry = new THREE.ConeGeometry(.085, .19, 24);
+    innerEarGeometry.translate(0, .1, 0);
+    for (const side of [-1, 1]) {
+      const earGroup = new THREE.Group();
+      earGroup.position.set(side * .2, .2, -.02);
+      const outerEar = new THREE.Mesh(earGeometry, this.furMaterial);
+      outerEar.scale.z = .5;
+      const innerEar = new THREE.Mesh(innerEarGeometry, pinkMaterial);
+      innerEar.scale.z = .25;
+      innerEar.position.set(0, .02, .04);
+      earGroup.add(outerEar, innerEar);
+      this.head.add(earGroup);
+      this.ears.push({ group: earGroup, side });
+    }
+
+    // 胡须
+    const whiskerPoints = [];
+    for (const side of [-1, 1]) {
+      for (let index = 0; index < 3; index++) {
+        whiskerPoints.push(new THREE.Vector3(side * .1, -.1 + index * .02, .29));
+        whiskerPoints.push(new THREE.Vector3(side * .42, -.05 + index * .05 - .04, .2));
+      }
+    }
+    const whiskers = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(whiskerPoints),
+      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .45 })
+    );
+    whiskers.raycast = () => {};
+    this.head.add(whiskers);
+
+    // ---------- 四条腿（Q 版短粗腿：大腿 + 小腿 + 圆爪子，从关节到爪底约 0.45） ----------
+    const upperLegGeometry = new THREE.CapsuleGeometry(.1, .16, 6, 16);
+    const lowerLegGeometry = new THREE.CapsuleGeometry(.085, .12, 6, 16);
+    const createLeg = (parent, x, y, z) => {
+      const upper = new THREE.Group();
+      upper.position.set(x, y, z);
+      const upperMesh = new THREE.Mesh(upperLegGeometry, this.furMaterial);
+      upperMesh.position.y = -.1;
+      upper.add(upperMesh);
+      const knee = new THREE.Group();
+      knee.position.y = -.22;
+      upper.add(knee);
+      const lowerMesh = new THREE.Mesh(lowerLegGeometry, this.furMaterial);
+      lowerMesh.position.y = -.08;
+      knee.add(lowerMesh);
+      knee.add(ellipsoid(this.furMaterial, .1, .06, .13, 0, -.17, .03));  // 爪子
+      knee.add(ellipsoid(pinkMaterial, .05, .012, .06, 0, -.226, .03));  // 肉垫（翻起时能看到）
+      parent.add(upper);
+      return { upper, knee };
+    };
+    this.legs = {
+      frontLeft: createLeg(this.chest, -.16, -.12, .02),
+      frontRight: createLeg(this.chest, .16, -.12, .02),
+      backLeft: createLeg(this.hips, -.19, 0, 0),
+      backRight: createLeg(this.hips, .19, 0, 0),
+    };
+
+    // ---------- 尾巴：一串看不见的关节，每帧根据关节位置重新生成一根平滑渐细的管子 ----------
+    this.tailBase = new THREE.Group();
+    this.tailBase.position.set(0, .14, -.26);
+    this.hips.add(this.tailBase);
+    this.tailSegments = [];
+    let parentSegment = this.tailBase;
+    for (let index = 0; index <= TAIL_SEGMENT_COUNT; index++) {
+      const segment = new THREE.Group();
+      segment.position.z = index === 0 ? 0 : -.07;
+      parentSegment.add(segment);
+      this.tailSegments.push(segment);
+      parentSegment = segment;
+    }
+    this.tailMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.furMaterial);
+    this.hips.add(this.tailMesh);
+    this.tailTip = ellipsoid(this.furMaterial, .042, .042, .042);
+    this.hips.add(this.tailTip);
+    this.tailJointPoints = this.tailSegments.map(() => new THREE.Vector3());
+
+    // 当前姿势参数（会平滑地追向目标值）
+    this.currentPose = BlackCatModel.createDefaultPose();
+  }
+
+  static createDefaultPose() {
+    return {
+      stand: 0, sit: 1, lie: 0, stretch: 0, lifted: 0,
+      walkAmount: 0, headYaw: 0, headPitch: 0, headRoll: 0,
+      eyeOpen: 1, squint: 0, pupilX: 0, pupilY: 0, pupilWidth: 1,
+      earBack: 0, earPerk: 0, mouthOpen: 0,
+      tailLift: .2, tailSwing: .25, tailSpeed: 2, tailWrap: 0,
+      groom: 0, bounce: 0, legKick: 0, breathRate: 2.2,
+      crouch: 0,        // 压低身子（蹑手蹑脚）
+      pawsOnLedge: 0,   // 两只前爪扒在边沿上
+    };
+  }
+
+  // 每帧调用：让当前姿势平滑追向目标姿势，再把参数应用到各个关节
+  update(targetPose, walkPhase, elapsedSeconds, deltaSeconds) {
+    const pose = this.currentPose;
+    for (const key of Object.keys(targetPose)) {
+      const rate = (key === 'squint' || key === 'mouthOpen' || key === 'eyeOpen' || key === 'pupilWidth') ? 14 : 7;
+      pose[key] = damp(pose[key], targetPose[key], rate, deltaSeconds);
+    }
+
+    // ---- 混合关键姿势 ----
+    const totalWeight = POSE_NAMES.reduce((sum, name) => sum + pose[name], 0) || 1;
+    const blended = {};
+    for (const joint of Object.keys(KEY_POSES.stand)) {
+      blended[joint] = POSE_NAMES.reduce((sum, name) => sum + KEY_POSES[name][joint] * pose[name], 0) / totalWeight;
+    }
+
+    // ---- 走路步态（对角线两条腿同步，像小跑） ----
+    const walk = pose.walkAmount;
+    const swing = Math.min(walk, 1.4) * .5;
+    const legPhase = { frontLeft: walkPhase, backRight: walkPhase, frontRight: walkPhase + Math.PI, backLeft: walkPhase + Math.PI };
+    const bobOffset = Math.cos(walkPhase * 2) * .018 * Math.min(walk, 1);
+
+    // ---- 身体 ----
+    this.hips.position.set(0, blended.hipsHeight - pose.crouch * .11 + bobOffset, blended.hipsShift);
+    this.hips.rotation.x = blended.hipsPitch + Math.sin(walkPhase * 2) * .02 * Math.min(walk, 1);
+    this.root.position.y = Math.abs(Math.sin(elapsedSeconds * 7)) * .1 * pose.bounce;
+    const breath = 1 + Math.sin(elapsedSeconds * pose.breathRate) * .018;
+    this.torso.scale.set(.36 * breath, .33 * breath, .46);
+
+    // ---- 腿 ----
+    for (const [legName, leg] of Object.entries(this.legs)) {
+      const isFront = legName.startsWith('front');
+      const phase = legPhase[legName];
+      let upperAngle = (isFront ? blended.frontUpper : blended.backUpper) + Math.sin(phase) * swing;
+      let kneeAngle = (isFront ? blended.frontKnee : blended.backKnee) + Math.max(0, -Math.cos(phase)) * swing * 1.5;
+      // 压低身子时腿弯曲
+      kneeAngle += pose.crouch * (isFront ? .35 : .5);
+      upperAngle += pose.crouch * (isFront ? -.2 : -.25);
+      // 被拎起来时四条腿乱蹬
+      upperAngle += Math.sin(elapsedSeconds * 13 + phase * 1.7) * .3 * pose.legKick;
+      // 舔爪：抬起右前爪到嘴边
+      if (legName === 'frontRight') {
+        upperAngle += -2.25 * pose.groom;
+        kneeAngle += 2.15 * pose.groom + Math.sin(elapsedSeconds * 6) * .15 * pose.groom;
+      }
+      // 扒边沿：两只前爪抬到下巴前
+      if (isFront) {
+        upperAngle += -2.0 * pose.pawsOnLedge;
+        kneeAngle += 1.7 * pose.pawsOnLedge;
+      }
+      leg.upper.rotation.x = upperAngle;
+      leg.knee.rotation.x = kneeAngle;
+    }
+
+    // ---- 头部：看向目标、歪头、舔爪时低头 ----
+    const groomNod = Math.sin(elapsedSeconds * 9) * .08 * pose.groom;
+    this.neck.rotation.set(blended.neckPitch + pose.headPitch * .5 + .35 * pose.groom - pose.crouch * .12, pose.headYaw * .5 + .3 * pose.groom, 0);
+    this.head.rotation.set(pose.headPitch * .5 + groomNod - bobOffset * 2, pose.headYaw * .5, pose.headRoll);
+
+    // ---- 眨眼（随机间隔） ----
+    this.blinkTimer -= deltaSeconds;
+    if (this.blinkTimer <= 0) { this.blinkAmount = 1; this.blinkTimer = randomBetween(2.5, 6); }
+    this.blinkAmount = Math.max(0, this.blinkAmount - deltaSeconds * 7);
+    const blinkScale = this.blinkAmount > .5 ? (1 - this.blinkAmount) * 2 : 1 - this.blinkAmount * .2;
+    const eyeOpenness = Math.max(.02, pose.eyeOpen * (1 - pose.squint * .78) * blinkScale);
+    for (const eye of this.eyes) {
+      eye.group.scale.y = eyeOpenness;
+      eye.pupil.position.x = pose.pupilX * .03;
+      eye.pupil.position.y = pose.pupilY * .03;
+      eye.pupil.scale.x = .03 * pose.pupilWidth;
+    }
+
+    // ---- 耳朵：飞机耳、竖耳朵、随机抖一下 ----
+    this.earTwitchTimer -= deltaSeconds;
+    if (this.earTwitchTimer <= 0) { this.earTwitchAmount = 1; this.earTwitchSide = pickRandom([-1, 1]); this.earTwitchTimer = randomBetween(3, 8); }
+    this.earTwitchAmount = Math.max(0, this.earTwitchAmount - deltaSeconds * 5);
+    for (const ear of this.ears) {
+      const twitch = ear.side === this.earTwitchSide ? Math.sin(this.earTwitchAmount * Math.PI) * .35 : 0;
+      ear.group.rotation.x = -pose.earBack * .9 + pose.earPerk * .15;
+      ear.group.rotation.z = ear.side * -(.3 + pose.earBack * .7) + ear.side * twitch;
+    }
+
+    // ---- 嘴巴 ----
+    this.mouth.scale.y = .004 + pose.mouthOpen * .032;
+
+    // ---- 尾巴：从根部到尾尖依次延迟摆动，形成波浪 ----
+    this.tailBase.rotation.x = pose.tailLift * .75;
+    this.tailSegments.forEach((segment, index) => {
+      const wave = Math.sin(elapsedSeconds * pose.tailSpeed - index * .45) * pose.tailSwing * (.25 + index * .06);
+      const tipCurl = index > TAIL_SEGMENT_COUNT - 4 ? -.18 * Math.max(0, pose.tailLift - .5) : 0;
+      segment.rotation.x = pose.tailLift * .07 + tipCurl - pose.tailWrap * .02;
+      segment.rotation.y = wave * .5 + pose.tailWrap * .3;
+    });
+    this.rebuildTailMesh();
+
+    this.shadow.material.opacity = 1 - pose.lifted;
+  }
+
+  // 沿尾巴关节生成一根从根部到尾尖逐渐变细的管子（约 300 个顶点，每帧重建开销很小）
+  rebuildTailMesh() {
+    const tubularSegments = 28, radialSegments = 10, rootRadius = .078, tipRadius = .04;
+    this.hips.updateMatrixWorld(true);
+    const hipsInverse = this.hips.matrixWorld.clone().invert();
+    this.tailSegments.forEach((segment, index) => {
+      this.tailJointPoints[index].setFromMatrixPosition(segment.matrixWorld).applyMatrix4(hipsInverse);
+    });
+    const curve = new THREE.CatmullRomCurve3(this.tailJointPoints);
+    const geometry = new THREE.TubeGeometry(curve, tubularSegments, 1, radialSegments, false);
+    const positions = geometry.attributes.position;
+    const ringCenter = new THREE.Vector3(), vertex = new THREE.Vector3();
+    for (let ring = 0; ring <= tubularSegments; ring++) {
+      const progress = ring / tubularSegments;
+      curve.getPointAt(progress, ringCenter);
+      const radius = rootRadius + (tipRadius - rootRadius) * progress;
+      for (let side = 0; side <= radialSegments; side++) {
+        const vertexIndex = ring * (radialSegments + 1) + side;
+        vertex.fromBufferAttribute(positions, vertexIndex).sub(ringCenter).multiplyScalar(radius).add(ringCenter);
+        positions.setXYZ(vertexIndex, vertex.x, vertex.y, vertex.z);
+      }
+    }
+    geometry.computeVertexNormals();
+    this.tailMesh.geometry.dispose();
+    this.tailMesh.geometry = geometry;
+    this.tailTip.position.copy(this.tailJointPoints[this.tailJointPoints.length - 1]);
+  }
+}
+
+// =====================================================================
+// 5. 猫的"大脑"：决定去哪儿、做什么、什么姿势
+// =====================================================================
+const BEHAVIOR_LABELS = {
+  wander: '散步中', flee: '溜走中', goRemind: '跑过来提醒你', remindWaiting: '等你喝水',
+  sit: '坐着发呆', stand: '站着张望', groom: '舔爪洗脸', stretch: '伸懒腰', rest: '趴着休息',
+  sleep: '睡觉 Zzz', petted: '被摸摸', happy: '开心', sulk: '生闷气', lifted: '被拎起来', landing: '落地', startled: '吓一跳',
+  sneakTo: '蹑手蹑脚找地方藏', sneakIn: '钻到后面去', tailOut: '藏头露尾', slipIn: '藏好', turnHidden: '偷偷转身',
+  peekOut: '慢慢探出头', peeking: '偷看你在干嘛 👀', duck: '嗖地缩回去', hiding: '躲着', caught: '被抓包了！', peekExit: '从藏身处出来',
+};
+const ROAM_MODE_LABELS = { free: '自由散步', anchored: '待在你放的地方', edge: '在屏幕边缘溜达' };
+const MOVING_BEHAVIORS = new Set(['wander', 'flee', 'goRemind', 'sneakTo', 'sneakIn', 'slipIn', 'peekOut', 'duck', 'peekExit']);
+const CALM_BEHAVIORS = new Set(['wander', 'sit', 'stand', 'groom', 'stretch', 'rest']);
+const PEEK_OUT_BEHAVIORS = new Set(['peekOut', 'peeking', 'caught']);              // 脑袋露在外面的阶段
+const PEEK_HIDDEN_BEHAVIORS = new Set(['slipIn', 'turnHidden', 'duck', 'hiding']); // 完全藏在后面的阶段
+
+class CatBrain {
+  constructor({ freeSpaceMap, desktop, peekPlanner, effects }) {
+    this.freeSpaceMap = freeSpaceMap;
+    this.desktop = desktop;
+    this.peekPlanner = peekPlanner;
+    this.effects = effects;
+    this.position = { x: 0, y: 0 };
+    this.yaw = 0;
+    this.targetYaw = 0;
+    this.behavior = 'sit';
+    this.behaviorTimer = 2;
+    this.path = [];
+    this.moveSpeed = WALK_SPEED;
+    this.currentSpeed = 0;
+    this.keepFacing = false;       // 移动时保持朝向（缩回去时倒退，不转身）
+    this.walkStyle = 'normal';     // normal / sneak / run
+    this.onArrive = null;
+    this.roamMode = 'free';        // free 自由散步 / anchored 待在原地 / edge 在边缘
+    this.isOnEdge = false;         // 当前是否在屏幕底边（任务栏上沿或全屏时的屏幕底边）
+    this.peek = null;              // 偷看状态：{ spot, peekCount, lastAnchor }
+    this.walkPhase = 0;
+    this.elapsedSeconds = 0;
+    this.lastPettedTime = -99;
+    this.effectTimer = 0;
+    this.cursor = { x: -9999, y: -9999, speed: 0 };
+    this.isReady = false;          // 初始位置设置好之后才开始响应窗口变化
+  }
+
+  get edgeLineY() { return this.desktop.workArea.bottom; }
+
+  get peekGeometry() { return this.peek ? this.peekPlanner.geometryOf(this.peek.spot) : null; }
+
+  // 头的大概位置（用来摆气泡、特效、判断鼠标距离）
+  get headPosition() {
+    const geometry = this.peekGeometry;
+    if (geometry && PEEK_OUT_BEHAVIORS.has(this.behavior)) return geometry.headPosition;
+    return { x: this.position.x, y: this.position.y - 78 };
+  }
+
+  // 偷看时需要裁掉的区域（猫和藏身窗口重叠的部分变透明，看起来就像躲在窗口后面）
+  get clipRect() {
+    return this.peek ? this.peekGeometry?.cover ?? null : null;
+  }
+
+  setBehavior(behavior, durationSeconds = Infinity) {
+    this.behavior = behavior;
+    this.behaviorTimer = durationSeconds;
+    this.path = [];
+    this.onArrive = null;
+    this.keepFacing = false;
+    this.walkStyle = 'normal';
+    // 坐下时大多数时候转过来面向你，更可爱
+    if (!this.peek) {
+      if (behavior === 'sit' || behavior === 'groom') this.targetYaw = randomBetween(-.9, .9);
+      if (behavior === 'remindWaiting' || behavior === 'happy' || behavior === 'petted') this.targetYaw = 0;
+      if (behavior === 'sulk') this.targetYaw = Math.PI;
+    }
+  }
+
+  moveAlong(path, speed, behavior, onArrive, options = {}) {
+    if (!path || !path.length) {
+      this.behavior = behavior;
+      this.path = [];
+      onArrive?.();
+      return;
+    }
+    this.behavior = behavior;
+    this.behaviorTimer = Infinity;
+    this.path = path;
+    this.moveSpeed = speed;
+    this.onArrive = onArrive;
+    this.keepFacing = options.keepFacing ?? false;
+    this.walkStyle = options.walkStyle ?? (speed >= RUN_SPEED ? 'run' : 'normal');
+  }
+
+  // ---------------- 日常行为 ----------------
+  chooseNextBehavior() {
+    if (this.roamMode === 'anchored') { this.idleInPlace(); return; }
+    // 自由模式下蹲在边缘时，一旦桌面有了空地就回去
+    if (this.roamMode === 'free' && this.isOnEdge && this.freeSpaceMap.freeCellCount > 0) { this.leaveEdge(); return; }
+    // 全屏 / 边缘模式时更低调：更多时间躲起来只露出脑袋
+    const peekChance = this.desktop.hasFullscreenWindow ? .5 : this.isOnEdge ? .3 : .16;
+    if (Math.random() < peekChance && this.tryStartPeek()) return;
+    const roll = Math.random();
+    if (roll < .55) this.startWander();
+    else this.idleInPlace();
+  }
+
+  idleInPlace() {
+    const roll = Math.random();
+    if (roll < .35) this.setBehavior('sit', randomBetween(3, 6));
+    else if (roll < .5) this.setBehavior('stand', randomBetween(2, 4));
+    else if (roll < .7) this.setBehavior('groom', randomBetween(3, 5));
+    else if (roll < .8) this.setBehavior('stretch', 2.4);
+    else this.setBehavior('rest', randomBetween(5, 9));
+  }
+
+  startWander(avoidPoint = null, speed = WALK_SPEED, behavior = 'wander') {
+    const afterArrive = () => this.setBehavior(pickRandom(['sit', 'sit', 'stand']), randomBetween(2, 5));
+    if (this.isOnEdge) {
+      const workArea = this.desktop.workArea;
+      let targetX = randomBetween(100, workArea.right - 100);
+      if (avoidPoint) targetX = avoidPoint.x < this.position.x ? Math.min(workArea.right - 80, this.position.x + 300) : Math.max(80, this.position.x - 300);
+      this.moveAlong([{ x: targetX, y: this.edgeLineY }], speed, behavior, afterArrive);
+      return;
+    }
+    const path = this.freeSpaceMap.planWander(this.position, avoidPoint);
+    if (!path) { this.setBehavior('sit', 3); return; }
+    this.moveAlong(path, speed, behavior, afterArrive);
+  }
+
+  goEdge() {
+    this.isOnEdge = true;
+    const workArea = this.desktop.workArea;
+    this.moveAlong([{ x: clamp(this.position.x, 90, workArea.right - 90), y: this.edgeLineY }], RUN_SPEED, 'flee', () => this.setBehavior('sit', 2));
+  }
+
+  leaveEdge() {
+    this.isOnEdge = false;
+    const cellIndex = this.freeSpaceMap.nearestFreeCell(this.position.x, this.position.y);
+    if (cellIndex < 0) { this.isOnEdge = true; this.setBehavior('sit', 3); return; }
+    this.moveAlong([this.freeSpaceMap.cellCenter(cellIndex)], WALK_SPEED, 'wander', () => this.setBehavior('sit', 2));
+  }
+
+  setRoamMode(mode) {
+    const applyMode = () => {
+      this.roamMode = mode;
+      if (mode === 'free') { this.effects.sayLine('mode-free', { isImportant: true }); this.chooseNextBehavior(); }
+      if (mode === 'anchored') { this.effects.sayLine('mode-anchored', { isImportant: true }); this.setBehavior('sit', 3); }
+      if (mode === 'edge') { this.effects.sayLine('mode-edge', { isImportant: true }); this.goEdge(); }
+    };
+    if (this.peek) this.exitPeek(applyMode); else applyMode();
+  }
+
+  // ---------------- 偷看（躲猫猫） ----------------
+  tryStartPeek(isRequestedByUser = false) {
+    if (this.roamMode === 'anchored' && !isRequestedByUser) return false;
+    const plan = this.peekPlanner.plan(this.position, this.isOnEdge, this.edgeLineY);
+    if (!plan) return false;
+    if (this.roamMode === 'anchored') this.roamMode = 'free';
+    const geometry = this.peekPlanner.geometryOf(plan.spot);
+    this.peek = { spot: plan.spot, peekCount: 0, lastAnchor: { ...geometry.anchor } };
+    if (isRequestedByUser) this.effects.sayLine('peek-start-01', { isImportant: true });
+    this.moveAlong(plan.path, SNEAK_SPEED, 'sneakTo', () => this.peekSneakIn(), { walkStyle: 'sneak' });
+    return true;
+  }
+
+  // 钻进去一半：尾巴还露在外面晃
+  peekSneakIn() {
+    const geometry = this.peekGeometry;
+    if (!geometry) { this.abortPeek(); return; }
+    this.moveAlong([geometry.tailOutPoint], SNEAK_SPEED, 'sneakIn', () => this.setBehavior('tailOut', randomBetween(1.2, 2)), { walkStyle: 'sneak' });
+  }
+
+  // 整个藏进去，然后在里面转身
+  peekSlipIn() {
+    const geometry = this.peekGeometry;
+    if (!geometry) { this.abortPeek(); return; }
+    this.moveAlong([geometry.hiddenPoint], 70, 'slipIn', () => {
+      this.setBehavior('turnHidden', .9);
+      this.targetYaw = geometry.outYaw;
+    }, { walkStyle: 'sneak' });
+  }
+
+  // 慢慢探出半个脑袋
+  peekPopOut() {
+    const geometry = this.peekGeometry;
+    if (!geometry) { this.abortPeek(); return; }
+    this.targetYaw = geometry.outYaw;
+    this.moveAlong([geometry.peekPoint], 22, 'peekOut', () => this.setBehavior('peeking', randomBetween(7, 12)), { keepFacing: true, walkStyle: 'sneak' });
+  }
+
+  // 嗖地缩回去（倒退，不转身）
+  peekDuck(isScared) {
+    const geometry = this.peekGeometry;
+    if (!geometry) { this.abortPeek(); return; }
+    this.peek.peekCount++;
+    if (isScared) this.effects.float('嗖！', geometry.headPosition);
+    this.moveAlong([geometry.hiddenPoint], isScared ? 320 : 110, 'duck', () => this.setBehavior('hiding', randomBetween(1.5, 3)), { keepFacing: true, walkStyle: 'sneak' });
+  }
+
+  // 被鼠标"抓包"：愣住、瞪大眼睛，然后缩回去
+  peekCaught() {
+    if (!PEEK_OUT_BEHAVIORS.has(this.behavior) || this.behavior === 'caught') return;
+    this.setBehavior('caught', .75);
+    this.effects.float('❗', this.headPosition);
+    // 偷看时保持安静，只有被抓包才"喵？"一声再小声辩解
+    this.effects.sayLine('peekCaught', { durationMs: 1800, meowKind: 'question' });
+  }
+
+  // 从藏身处走出来
+  exitPeek(afterExit) {
+    const geometry = this.peekGeometry;
+    if (!geometry) { this.abortPeek(); afterExit?.(); return; }
+    this.moveAlong([geometry.stagingPoint], WALK_SPEED, 'peekExit', () => {
+      this.peek = null;
+      if (afterExit) afterExit(); else this.setBehavior('sit', randomBetween(2, 4));
+    });
+  }
+
+  abortPeek() {
+    this.peek = null;
+    this.setBehavior('landing', .4);
+  }
+
+  // 藏身的窗口被拖动：猫扒着窗口跟着走；窗口没了：掉下来
+  refreshPeek() {
+    const geometry = this.peekGeometry;
+    if (!geometry) {
+      this.peek = null;
+      this.effects.sayLine('peek-cover-gone', { isImportant: true });
+      this.setBehavior('landing', .4);
+      return;
+    }
+    const deltaX = geometry.anchor.x - this.peek.lastAnchor.x;
+    const deltaY = geometry.anchor.y - this.peek.lastAnchor.y;
+    if (deltaX || deltaY) {
+      this.position.x += deltaX;
+      this.position.y += deltaY;
+      this.path.forEach(point => { point.x += deltaX; point.y += deltaY; });
+      this.peek.lastAnchor = { ...geometry.anchor };
+    }
+  }
+
+  // ---------------- 窗口布局变化 ----------------
+  handleLayoutChange() {
+    if (!this.isReady || this.behavior === 'lifted') return; // 初始化还没完成时不处理，避免误报"被压到"
+    if (this.peek) { this.refreshPeek(); return; }
+    if (this.roamMode === 'anchored') return;
+    if (this.isOnEdge) {
+      // 全屏切换时边线高度会变（任务栏上沿 ↔ 屏幕底边）
+      this.path.forEach(point => { point.y = this.edgeLineY; });
+      if (Math.abs(this.position.y - this.edgeLineY) > 1 && !MOVING_BEHAVIORS.has(this.behavior)) {
+        this.moveAlong([{ x: this.position.x, y: this.edgeLineY }], RUN_SPEED, 'flee', () => this.setBehavior('sit', 2));
+      }
+      return;
+    }
+    if (this.roamMode === 'edge' || this.freeSpaceMap.freeCellCount === 0) { this.goEdge(); return; }
+    const isCovered = !this.freeSpaceMap.isPositionFree(this.position.x, this.position.y);
+    if (isCovered && this.behavior !== 'flee') {
+      const cellIndex = this.freeSpaceMap.nearestFreeCell(this.position.x, this.position.y);
+      const wasReminding = this.behavior === 'goRemind' || this.behavior === 'remindWaiting';
+      this.moveAlong([this.freeSpaceMap.cellCenter(cellIndex)], RUN_SPEED, 'flee',
+        () => wasReminding ? this.startRemind() : this.setBehavior('sit', 2));
+      if (!wasReminding) this.effects.sayLine('squeezed-01');
+    } else if (this.behavior === 'wander' && this.path.some(point => !this.freeSpaceMap.isPositionFree(point.x, point.y))) {
+      this.startWander(); // 路线被挡住，重新规划
+    }
+  }
+
+  // ---------------- 提醒、互动 ----------------
+  startRemind() {
+    this.effects.hideBubble();
+    if (this.peek) { this.exitPeek(() => this.startRemind()); return; }
+    const arriveAndRemind = () => { this.setBehavior('remindWaiting'); this.effects.showReminderBubble(); };
+    if (this.roamMode === 'anchored') { arriveAndRemind(); return; }
+    if (this.isOnEdge) {
+      const workArea = this.desktop.workArea;
+      this.moveAlong([{ x: clamp(this.position.x, 130, workArea.right - 130), y: this.edgeLineY }], RUN_SPEED, 'goRemind', arriveAndRemind);
+      return;
+    }
+    const focusPoint = this.cursor.x > 0 ? this.cursor : { x: innerWidth / 2, y: innerHeight / 2 };
+    this.moveAlong(this.freeSpaceMap.planToward(this.position, focusPoint, 190), RUN_SPEED, 'goRemind', arriveAndRemind);
+  }
+
+  goToSleep() {
+    this.effects.hideBubble();
+    if (this.peek) { this.exitPeek(() => this.goToSleep()); return; }
+    if (this.roamMode === 'free' && !this.isOnEdge) {
+      this.moveAlong(this.freeSpaceMap.planWander(this.position), WALK_SPEED, 'wander', () => this.setBehavior('sleep'));
+    } else {
+      this.setBehavior('sleep');
+    }
+  }
+
+  drinkRecorded() {
+    if (this.peek) { this.effects.burst('💧', 2); return; }
+    this.setBehavior('happy', 2.8);
+    this.effects.burst('💧', 3);
+  }
+
+  snooze() {
+    this.setBehavior('sulk', 2.8);
+    this.effects.sayLine('snooze', { isImportant: true });
+  }
+
+  pet() {
+    this.lastPettedTime = this.elapsedSeconds;
+    // 偷看时被摸头：害羞但不出来
+    if (this.peek) {
+      this.effects.burst('❤', 2);
+      this.effects.purr();
+      this.effects.sayLine('peek-petted-01');
+      if (this.behavior === 'peeking') this.behaviorTimer += 3;
+      return;
+    }
+    if (this.behavior === 'sleep') {
+      this.setBehavior('stretch', 2.4);
+      this.effects.sayLine('wake-up-01', { durationMs: 3500, isImportant: true });
+      return;
+    }
+    if (this.behavior === 'remindWaiting') return;
+    this.setBehavior('petted', 2.4);
+    this.effects.burst('❤', 2);
+    this.effects.purr(); // 被摸只呼噜，不说话
+    this.effects.say(pickRandom(['喵呜～再摸一下 🥰', '呼噜呼噜…', '就摸一下下哦～']));
+  }
+
+  liftUp() {
+    this.peek = null;
+    this.isOnEdge = false;
+    this.setBehavior('lifted');
+    this.effects.sayLine('lifted-01', { meowKind: 'complain', fallbackText: '放本喵下来！' });
+  }
+
+  // 放下：放到底边 → 沿边缘溜达；放到空地 → 自由散步；放到窗口上 → 就待在那儿
+  dropAt(x, y) {
+    const workArea = this.desktop.workArea;
+    this.position.x = clamp(x, 40, workArea.right - 40);
+    this.position.y = clamp(y, 130, workArea.bottom);
+    if (this.position.y >= this.edgeLineY - 40) {
+      this.position.y = this.edgeLineY;
+      this.isOnEdge = true;
+      this.roamMode = 'edge';
+      this.effects.sayLine('drop-edge', { isImportant: true });
+    } else if (this.freeSpaceMap.isPositionFree(this.position.x, this.position.y)) {
+      this.roamMode = 'free';
+    } else {
+      this.roamMode = 'anchored';
+      this.effects.sayLine('drop-anchored', { isImportant: true });
+    }
+    this.setBehavior('landing', .5);
+  }
+
+  afterLanding() {
+    if (this.roamMode === 'anchored' || this.isOnEdge) this.setBehavior('sit', 2);
+    else if (this.freeSpaceMap.freeCellCount === 0) this.goEdge();
+    else if (!this.freeSpaceMap.isPositionFree(this.position.x, this.position.y)) this.handleLayoutChange();
+    else this.setBehavior('sit', 2);
+  }
+
+  // 定时行为结束后接下来做什么
+  handleBehaviorTimeout() {
+    switch (this.behavior) {
+      case 'landing': this.afterLanding(); break;
+      case 'tailOut': this.peekSlipIn(); break;
+      case 'turnHidden': this.peekPopOut(); break;
+      case 'caught': this.peekDuck(false); break;
+      case 'peeking':
+        // 偷看够了：有时自己缩回去再探一次（躲猫猫），有时直接出来
+        if (this.peek.peekCount < 2 && Math.random() < .4) this.peekDuck(false);
+        else this.exitPeek();
+        break;
+      case 'hiding':
+        if (this.peek.peekCount >= 3) this.exitPeek(() => { this.effects.sayLine('peek-give-up'); this.setBehavior('sit', 3); });
+        else this.peekPopOut();
+        break;
+      case 'startled': this.setBehavior('sit', 2); break;
+      default: this.chooseNextBehavior();
+    }
+  }
+
+  update(deltaSeconds) {
+    this.elapsedSeconds += deltaSeconds;
+    if (this.behavior === 'lifted') return;
+
+    if (this.path.length) {
+      this.advanceAlongPath(deltaSeconds);
+    } else {
+      this.currentSpeed = 0;
+      this.behaviorTimer -= deltaSeconds;
+      if (this.behaviorTimer <= 0) this.handleBehaviorTimeout();
+    }
+
+    // 鼠标高速冲过来
+    const head = this.headPosition;
+    const distanceToCursor = Math.hypot(this.cursor.x - head.x, this.cursor.y - head.y);
+    if (PEEK_OUT_BEHAVIORS.has(this.behavior) && this.behavior !== 'caught' &&
+        distanceToCursor < 180 && this.cursor.speed > PEEK_DUCK_CURSOR_SPEED) {
+      this.peekDuck(true);
+    } else if (CALM_BEHAVIORS.has(this.behavior) && distanceToCursor < 150 && this.cursor.speed > SCARE_CURSOR_SPEED &&
+        this.elapsedSeconds - this.lastPettedTime > 3) {
+      this.effects.sayLine('scared-01', { meowKind: 'scared' });
+      if (this.roamMode === 'anchored') this.setBehavior('startled', .9);
+      else this.startWander(this.cursor, RUN_SPEED, 'flee');
+    }
+
+    // 定期冒小特效
+    this.effectTimer -= deltaSeconds;
+    if (this.effectTimer <= 0) {
+      this.effectTimer = .5;
+      if (this.behavior === 'sleep') { this.effects.float('Z', head); this.effectTimer = 1.4; }
+      else if (this.behavior === 'remindWaiting') { this.effects.float('喵～', head); this.effectTimer = 1.8; }
+      else if (this.behavior === 'peeking') { this.effects.float(pickRandom(['👀', '？', '…']), head); this.effectTimer = randomBetween(2.5, 4); }
+    }
+
+    this.yaw = dampAngle(this.yaw, this.targetYaw, MOVING_BEHAVIORS.has(this.behavior) ? 7 : 3.5, deltaSeconds);
+  }
+
+  advanceAlongPath(deltaSeconds) {
+    const target = this.path[0];
+    const deltaX = target.x - this.position.x, deltaY = target.y - this.position.y;
+    const distance = Math.hypot(deltaX, deltaY);
+    let speedFactor = 1;
+    if (!this.keepFacing) {
+      if (distance > .5) this.targetYaw = Math.atan2(deltaX, deltaY);
+      // 转身角度太大时先原地转身再走
+      const facingError = Math.abs(Math.atan2(Math.sin(this.targetYaw - this.yaw), Math.cos(this.targetYaw - this.yaw)));
+      if (facingError > 1.2) speedFactor = .25;
+    }
+    const step = this.moveSpeed * speedFactor * deltaSeconds;
+    if (distance <= step) {
+      this.position.x = target.x;
+      this.position.y = target.y;
+      this.path.shift();
+      if (!this.path.length) {
+        const callback = this.onArrive;
+        this.onArrive = null;
+        this.currentSpeed = 0;
+        callback?.();
+        return;
+      }
+    } else {
+      this.position.x += deltaX / distance * step;
+      this.position.y += deltaY / distance * step;
+    }
+    this.currentSpeed = step / deltaSeconds;
+    this.walkPhase += step / STRIDE_LENGTH * Math.PI * 2;
+  }
+
+  // 根据当前行为生成目标姿势
+  buildTargetPose() {
+    const pose = BlackCatModel.createDefaultPose();
+    POSE_NAMES.forEach(name => pose[name] = 0);
+    const behavior = this.behavior;
+    const peekExit = this.peekGeometry?.exit;
+
+    if (MOVING_BEHAVIORS.has(behavior)) {
+      pose.stand = 1;
+      pose.walkAmount = this.currentSpeed / WALK_SPEED;
+      pose.tailLift = .95;
+      pose.tailSwing = .18;
+      pose.tailSpeed = 4;
+      if (this.walkStyle === 'run') { pose.tailLift = .3; pose.earBack = .6; }
+      if (this.walkStyle === 'sneak') {
+        // 蹑手蹑脚：压低身子、尾巴放低、耳朵朝前、步子小
+        pose.crouch = 1;
+        pose.tailLift = .1;
+        pose.tailSwing = .08;
+        pose.earPerk = .7;
+        pose.walkAmount = Math.min(pose.walkAmount * 1.3, 1);
+      }
+      if (behavior === 'duck') pose.walkAmount = 0; // 缩回去是"嗖"地滑回去
+    } else if (behavior === 'stand' || behavior === 'landing') {
+      pose.stand = 1;
+      pose.tailLift = .8;
+    } else if (behavior === 'stretch') {
+      pose.stretch = 1;
+      pose.tailLift = 1.3;
+      pose.eyeOpen = .25;
+      pose.mouthOpen = .8;
+    } else if (behavior === 'rest') {
+      pose.lie = 1;
+      pose.eyeOpen = .5;
+      pose.tailLift = -.25;
+      pose.tailWrap = .5;
+    } else if (behavior === 'sleep') {
+      pose.lie = 1;
+      pose.eyeOpen = 0;
+      pose.headPitch = .35;
+      pose.tailLift = -.3;
+      pose.tailWrap = 1;
+      pose.tailSwing = .05;
+      pose.breathRate = 1.3;
+    } else if (behavior === 'lifted') {
+      pose.lifted = 1;
+      pose.legKick = 1;
+      pose.earBack = .8;
+      pose.eyeOpen = 1.15;
+      pose.pupilWidth = 2.2;
+      pose.tailLift = -1;
+      pose.tailSwing = .5;
+      pose.tailSpeed = 6;
+    } else if (behavior === 'tailOut' || behavior === 'turnHidden' || behavior === 'hiding') {
+      // 藏着：压低身子；藏头露尾时尾巴尖在外面得意地晃
+      pose.stand = 1;
+      pose.crouch = 1;
+      pose.tailLift = behavior === 'tailOut' ? .55 : .1;
+      pose.tailSwing = behavior === 'tailOut' ? .75 : .1;
+      pose.tailSpeed = 5;
+    } else if (behavior === 'peeking' || behavior === 'caught') {
+      pose.stand = 1;
+      pose.crouch = .6;
+    } else {
+      pose.sit = 1;
+      pose.tailLift = -.15;
+    }
+
+    // 从上边沿探头：坐着，两只前爪扒在边沿上
+    if (peekExit === 'up' && (PEEK_OUT_BEHAVIORS.has(behavior) || PEEK_HIDDEN_BEHAVIORS.has(behavior))) {
+      POSE_NAMES.forEach(name => pose[name] = 0);
+      pose.sit = 1;
+      pose.pawsOnLedge = 1;
+      pose.crouch = 0;
+      pose.walkAmount = 0;
+    }
+    if (behavior === 'peeking' || behavior === 'peekOut') {
+      // 偷看：竖起耳朵、慢慢歪头
+      pose.earPerk = 1;
+      pose.headRoll = .2 + Math.sin(this.elapsedSeconds * 1.3) * .14;
+      pose.pupilWidth = 1.5;
+    }
+    if (behavior === 'caught' || behavior === 'startled') {
+      pose.eyeOpen = 1.25;
+      pose.pupilWidth = 2.4;
+      pose.earBack = behavior === 'startled' ? .9 : .3;
+      pose.headRoll = 0;
+    }
+    if (behavior === 'groom') { pose.groom = 1; pose.squint = .6; }
+    if (behavior === 'remindWaiting') {
+      pose.earPerk = 1;
+      pose.headPitch = -.2;
+      pose.pupilWidth = 1.8;
+      pose.mouthOpen = Math.max(0, Math.sin(this.elapsedSeconds * 3.5)) > .6 ? 1 : 0;
+      pose.headRoll = Math.sin(this.elapsedSeconds * 1.7) * .18;
+      pose.tailLift = .9;
+      pose.tailSwing = .45;
+      pose.tailSpeed = 3;
+    }
+    if (behavior === 'happy') { pose.squint = 1; pose.tailLift = 1.4; pose.bounce = 1; pose.headRoll = .2; }
+    if (behavior === 'petted') { pose.squint = .9; pose.tailLift = 1.2; pose.headRoll = .28; pose.earBack = .25; }
+    if (behavior === 'sulk') { pose.tailSwing = .7; pose.tailSpeed = 7; pose.earBack = .5; pose.tailLift = .1; }
+
+    // 鼠标在附近时：转头看你，瞳孔跟着动（偷看时看得更远）
+    const canLook = !['sleep', 'groom', 'lifted', 'sulk', 'stretch', 'duck', 'hiding', 'slipIn', 'turnHidden', 'tailOut', 'sneakIn'].includes(behavior);
+    const head = this.headPosition;
+    const deltaX = this.cursor.x - head.x, deltaY = this.cursor.y - head.y;
+    const distanceToCursor = Math.hypot(deltaX, deltaY);
+    const lookRange = PEEK_OUT_BEHAVIORS.has(behavior) ? 900 : 320;
+    if (canLook && distanceToCursor < lookRange) {
+      const worldYaw = Math.atan2(deltaX, Math.max(deltaY, 30) + 120); // 鼠标在屏幕上方时也偏向镜头
+      const relativeYaw = Math.atan2(Math.sin(worldYaw - this.yaw), Math.cos(worldYaw - this.yaw));
+      pose.headYaw = clamp(relativeYaw, -1.1, 1.1);
+      pose.headPitch += clamp(deltaY / 260, -.5, .4);
+      pose.pupilX = clamp(relativeYaw * .8, -1, 1);
+      pose.pupilY = clamp(-deltaY / 200, -1, 1);
+      if (distanceToCursor < 120 && CALM_BEHAVIORS.has(behavior)) pose.earPerk = 1;
+    }
+    return pose;
+  }
+}
+
+// =====================================================================
+// 6. 渲染
+// =====================================================================
+const catCanvas = document.getElementById('catCanvas');
+const renderer = new THREE.WebGLRenderer({ canvas: catCanvas, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(CAT_CANVAS_SIZE, CAT_CANVAS_SIZE);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(26, 1, .1, 50);
+camera.position.set(0, 2.15, 5.5);
+camera.lookAt(0, .64, 0);
+
+// 灯光：主光 + 两盏轮廓光（让黑猫在任何壁纸上都有清晰的边缘）
+scene.add(new THREE.HemisphereLight(0xe2ebff, 0x2a241e, 1.0));
+const keyLight = new THREE.DirectionalLight(0xfff2e0, 2.4);
+keyLight.position.set(2.5, 4, 3.5);
+const rimLightLeft = new THREE.DirectionalLight(0xc4d8ff, 3.2);
+rimLightLeft.position.set(-3, 2.5, -3.5);
+const rimLightRight = new THREE.DirectionalLight(0xffe2c4, 1.8);
+rimLightRight.position.set(3.2, 1.6, -3);
+scene.add(keyLight, rimLightLeft, rimLightRight);
+
+const catModel = new BlackCatModel();
+scene.add(catModel.root);
+
+// 脚底中心（世界坐标原点）投影到画布上的像素位置，用来把画布对齐到猫的位置
+const groundPointOnCanvas = (() => {
+  camera.updateMatrixWorld(); // lookAt 之后要先更新矩阵，否则投影结果不对
+  const projected = new THREE.Vector3(0, 0, 0).project(camera);
+  return { x: (projected.x + 1) / 2 * CAT_CANVAS_SIZE, y: (1 - projected.y) / 2 * CAT_CANVAS_SIZE };
+})();
+
+// =====================================================================
+// 7. 界面特效（气泡、漂浮文字）
+// =====================================================================
+const speechBubble = document.getElementById('speechBubble');
+const speechText = document.getElementById('speechText');
+const speechActions = document.getElementById('speechActions');
+let bubbleHideTimer = null;
+const REMIND_LINES = ['喵～两脚兽，该喝水啦！🐾', '本喵的碗都快见底了，你的杯子呢？🥺', '检测到铲屎官含水量下降，请立即补水！🚨', '黑猫不会带来坏运气，不喝水才会！✨'];
+
+// =====================================================================
+// 声音：Web Audio 合成猫叫 + 语音合成说台词
+// =====================================================================
+const SPEAK_COOLDOWN_SECONDS = 6;   // 非提醒类的说话冷却时间，避免唠叨
+
+// 预生成的台词语音清单（由 tools/voice-generator 生成，见 voice/voice-manifest.js）
+const voiceManifest = window.MEIQIU_VOICE_MANIFEST ?? { lines: [] };
+function pickVoiceLine(key, count) {
+  const lineById = voiceManifest.lines.find(line => line.id === key);
+  if (lineById) return lineById;
+  const candidates = voiceManifest.lines.filter(line => line.group === key && (count === undefined || line.count === count));
+  return candidates.length ? pickRandom(candidates) : null;
+}
+const catVoice = {
+  isEnabled: true,
+  mode: 'full',                     // full：猫叫 + 说话；meowOnly：只有猫叫
+  audioContext: null,
+  lastSpeakTime: -99,
+  selectedVoice: null,
+
+  ensureAudioContext() {
+    if (!this.isEnabled) return null;
+    if (!this.audioContext) this.audioContext = new AudioContext();
+    if (this.audioContext.state === 'suspended') this.audioContext.resume();
+    return this.audioContext;
+  },
+
+  // 合成一声猫叫：锯齿波经过共振峰滤波（"咿→啊→呜"的口型变化），音高先升后降
+  meow(kind = 'call') {
+    const context = this.ensureAudioContext();
+    if (!context) return;
+    const presets = {
+      call:     { duration: .75, startPitch: 520, peakPitch: 860, endPitch: 430, volume: .22 }, // 提醒："喵～～"
+      short:    { duration: .32, startPitch: 620, peakPitch: 900, endPitch: 560, volume: .18 }, // 打招呼："喵"
+      question: { duration: .28, startPitch: 560, peakPitch: 640, endPitch: 980, volume: .16 }, // 被抓包："喵？"（尾音上扬）
+      scared:   { duration: .38, startPitch: 900, peakPitch: 1300, endPitch: 700, volume: .2 }, // 被吓到："喵嗷！"
+      complain: { duration: .55, startPitch: 480, peakPitch: 700, endPitch: 380, volume: .2 },  // 被拎起来
+    };
+    const preset = presets[kind] ?? presets.call;
+    const now = context.currentTime;
+    const end = now + preset.duration;
+
+    const oscillator = context.createOscillator();
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.setValueAtTime(preset.startPitch, now);
+    oscillator.frequency.linearRampToValueAtTime(preset.peakPitch, now + preset.duration * .35);
+    oscillator.frequency.exponentialRampToValueAtTime(preset.endPitch, end);
+    // 轻微颤音，更像真猫
+    const vibrato = context.createOscillator();
+    const vibratoDepth = context.createGain();
+    vibrato.frequency.value = 7;
+    vibratoDepth.gain.value = 12;
+    vibrato.connect(vibratoDepth).connect(oscillator.frequency);
+
+    const formant = context.createBiquadFilter();
+    formant.type = 'bandpass';
+    formant.Q.value = 3.5;
+    formant.frequency.setValueAtTime(1900, now);
+    formant.frequency.linearRampToValueAtTime(1250, now + preset.duration * .45);
+    formant.frequency.linearRampToValueAtTime(750, end);
+
+    const envelope = context.createGain();
+    envelope.gain.setValueAtTime(0, now);
+    envelope.gain.linearRampToValueAtTime(preset.volume, now + .05);
+    envelope.gain.setValueAtTime(preset.volume * .85, now + preset.duration * .6);
+    envelope.gain.linearRampToValueAtTime(0, end);
+
+    oscillator.connect(formant).connect(envelope).connect(context.destination);
+    oscillator.start(now);
+    vibrato.start(now);
+    oscillator.stop(end + .05);
+    vibrato.stop(end + .05);
+  },
+
+  // 合成呼噜声：低频噪声 + 每秒约 25 次的起伏
+  purr(durationSeconds = 1.6) {
+    const context = this.ensureAudioContext();
+    if (!context) return;
+    const now = context.currentTime;
+    const sampleCount = Math.floor(context.sampleRate * durationSeconds);
+    const noiseBuffer = context.createBuffer(1, sampleCount, context.sampleRate);
+    const samples = noiseBuffer.getChannelData(0);
+    let previous = 0;
+    for (let index = 0; index < sampleCount; index++) {
+      previous = (previous + (Math.random() * 2 - 1) * .08) * .98; // 布朗噪声，听起来更低沉
+      samples[index] = previous * 3;
+    }
+    const noise = context.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const lowpass = context.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 260;
+    const tremolo = context.createGain();
+    const tremoloOscillator = context.createOscillator();
+    const tremoloDepth = context.createGain();
+    tremoloOscillator.frequency.value = 25;
+    tremoloDepth.gain.value = .5;
+    tremolo.gain.value = .5;
+    tremoloOscillator.connect(tremoloDepth).connect(tremolo.gain);
+    const envelope = context.createGain();
+    envelope.gain.setValueAtTime(0, now);
+    envelope.gain.linearRampToValueAtTime(.5, now + .2);
+    envelope.gain.linearRampToValueAtTime(0, now + durationSeconds);
+    noise.connect(lowpass).connect(tremolo).connect(envelope).connect(context.destination);
+    noise.start(now);
+    tremoloOscillator.start(now);
+    tremoloOscillator.stop(now + durationSeconds);
+  },
+
+  // 挑一个中文语音：优先自然的神经网络女声（晓伊、晓晓），没有就用系统自带的
+  pickVoice() {
+    const voices = speechSynthesis.getVoices().filter(voice => voice.lang.toLowerCase().startsWith('zh'));
+    const preferredNames = ['Xiaoyi', 'Xiaoxiao', 'Xiaomeng', 'Huihui', 'Yaoyao', 'Google'];
+    for (const name of preferredNames) {
+      const voice = voices.find(item => item.name.includes(name) && /CN|中国/i.test(item.lang + item.name));
+      if (voice) return voice;
+    }
+    return voices[0] ?? null;
+  },
+
+  // 播放预生成的台词语音（萌丫头音色，按情绪生成）；文件播放失败时退回系统语音
+  //   meowKind：播放前先合成一声什么样的猫叫（不传就不叫）
+  playLine(line, { isImportant = false, meowKind = null } = {}) {
+    if (!this.isEnabled || !line) return;
+    const now = performance.now() / 1000;
+    if (!isImportant && now - this.lastSpeakTime < SPEAK_COOLDOWN_SECONDS) return;
+    this.lastSpeakTime = now;
+    if (meowKind) this.meow(meowKind);
+    if (this.mode !== 'full') return;
+    this.currentAudio?.pause();
+    const audio = new Audio(`../public/voice/${line.file}`);
+    audio.volume = .95;
+    this.currentAudio = audio;
+    const playAudio = () => audio.play().catch(() => this.speak(line.text, { isImportant: true, meowFirst: false, emotion: line.emotion }));
+    setTimeout(playAudio, meowKind ? 550 : 0);
+  },
+
+  // 系统语音兜底：先喵一声，再用调高的音调念台词（像小猫在说话）
+  // emotion：台词情绪（coquettish 撒娇 / happy 开心 / aggrieved 委屈 / surprised 惊讶 / angry 生气 / shy 害羞）
+  speak(text, { isImportant = false, meowFirst = true, emotion = 'coquettish' } = {}) {
+    if (!this.isEnabled) return;
+    const now = performance.now() / 1000;
+    if (!isImportant && now - this.lastSpeakTime < SPEAK_COOLDOWN_SECONDS) return;
+    this.lastSpeakTime = now;
+    if (meowFirst) this.meow(isImportant ? 'call' : 'short');
+    if (this.mode !== 'full' || !('speechSynthesis' in window)) return;
+    const spokenText = text.replace(/[\p{Extended_Pictographic}️‍]/gu, '').replace(/[（(].*?[)）]/g, '').trim();
+    if (!spokenText) return;
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    this.selectedVoice ??= this.pickVoice();
+    if (this.selectedVoice) utterance.voice = this.selectedVoice;
+    utterance.lang = 'zh-CN';
+    // 调高音调更像小猫；按情绪粗略调整音调和语速
+    const emotionTuning = {
+      coquettish: { pitch: 1.75, rate: 1.0 }, happy: { pitch: 1.85, rate: 1.15 }, aggrieved: { pitch: 1.55, rate: .92 },
+      surprised: { pitch: 1.95, rate: 1.2 }, angry: { pitch: 1.5, rate: 1.2 }, shy: { pitch: 1.7, rate: .95 },
+    }[emotion] ?? { pitch: 1.7, rate: 1.05 };
+    utterance.pitch = emotionTuning.pitch;
+    utterance.rate = emotionTuning.rate;
+    utterance.volume = .9;
+    setTimeout(() => speechSynthesis.speak(utterance), meowFirst ? 650 : 0);
+  },
+};
+if ('speechSynthesis' in window) speechSynthesis.addEventListener('voiceschanged', () => { catVoice.selectedVoice = catVoice.pickVoice(); });
+
+const effects = {
+  say(text, durationMs = 2200) {
+    clearTimeout(bubbleHideTimer);
+    speechText.textContent = text;
+    speechActions.style.display = 'none';
+    speechBubble.classList.add('visible');
+    bubbleHideTimer = setTimeout(() => speechBubble.classList.remove('visible'), durationMs);
+  },
+  showReminderBubble() {
+    clearTimeout(bubbleHideTimer);
+    const line = pickVoiceLine('remind');
+    speechText.textContent = line?.text ?? pickRandom(REMIND_LINES);
+    speechActions.style.display = 'flex';
+    speechBubble.classList.add('visible');
+    // 提醒一定要出声：先长长地"喵～"，再说台词
+    if (line) catVoice.playLine(line, { isImportant: true, meowKind: 'call' });
+    else catVoice.speak(speechText.textContent, { isImportant: true });
+  },
+  // 说一句预生成的台词：气泡显示文字（字幕），同时播放语音
+  //   key：台词 id 或分组名（同组随机挑一句）；count：喝水杯数类台词按杯数匹配
+  sayLine(key, { durationMs = 2600, count, isImportant = false, meowKind = null, fallbackText = '' } = {}) {
+    const line = pickVoiceLine(key, count);
+    const text = line?.text ?? fallbackText;
+    if (text) effects.say(text, durationMs);
+    if (line) catVoice.playLine(line, { isImportant, meowKind });
+    else if (meowKind) catVoice.meow(meowKind);
+  },
+  meow(kind) { catVoice.meow(kind); },
+  purr() { catVoice.purr(); },
+  hideBubble() { clearTimeout(bubbleHideTimer); speechBubble.classList.remove('visible'); },
+  float(text, position) {
+    const element = document.createElement('div');
+    element.className = 'floating-effect';
+    element.textContent = text;
+    element.style.left = position.x + randomBetween(-5, 25) + 'px';
+    element.style.top = position.y - 40 + 'px';
+    element.style.setProperty('--drift-x', randomBetween(-10, 25) + 'px');
+    document.body.appendChild(element);
+    setTimeout(() => element.remove(), 1700);
+  },
+  burst(text, count) {
+    for (let index = 0; index < count; index++) {
+      setTimeout(() => effects.float(text, { x: catBrain.headPosition.x - 30 + index * 15, y: catBrain.headPosition.y }), index * 180);
+    }
+  },
+};
+
+// =====================================================================
+// 8. 组装
+// =====================================================================
+const freeSpaceMap = new FreeSpaceMap();
+let catBrain = null;
+let overlayNeedsRedraw = true;
+const desktop = new DesktopSimulator(() => {
+  freeSpaceMap.rebuild(desktop.workArea, desktop.getObstacles().map(item => item.rect));
+  catBrain?.handleLayoutChange();
+  overlayNeedsRedraw = true;
+});
+const peekPlanner = new PeekPlanner(desktop, freeSpaceMap);
+catBrain = new CatBrain({ freeSpaceMap, desktop, peekPlanner, effects });
+
+// 初始的几个假窗口（按屏幕大小摆放）
+const screenWidth = innerWidth, screenHeight = innerHeight - TASKBAR_HEIGHT;
+desktop.createWindow({
+  title: 'Excel - 第三季度报表.xlsx', appClass: 'app-excel', contentHtml: '',
+  left: Math.round(screenWidth * .27), top: Math.round(screenHeight * .08), width: Math.round(screenWidth * .32), height: Math.round(screenHeight * .45),
+});
+desktop.createWindow({
+  title: 'VS Code - water-pet', appClass: 'app-code',
+  contentHtml: `<div><span class="comment">// 每 45 分钟提醒一次</span></div>
+    <div><span class="keyword">const</span> reminderInterval = <span class="string">45</span>;</div>
+    <div><span class="keyword">function</span> remindDrinkWater() {</div>
+    <div>&nbsp;&nbsp;cat.say(<span class="string">'喵～该喝水啦'</span>);</div><div>}</div>`,
+  left: Math.round(screenWidth * .63), top: Math.round(screenHeight * .05), width: Math.round(screenWidth * .33), height: Math.round(screenHeight * .4),
+});
+desktop.createWindow({
+  title: '微信', appClass: 'app-chat',
+  contentHtml: `<div class="chat-line">今天喝水了吗？</div><div class="chat-line mine">我家猫会提醒我 🐾</div>`,
+  left: Math.round(screenWidth * .4), top: Math.round(screenHeight * .6), width: 300, height: Math.round(screenHeight * .32),
+});
+
+// 猫的初始位置：右下角附近的空地
+{
+  const startCell = freeSpaceMap.nearestFreeCell(screenWidth * .85, screenHeight * .85);
+  if (startCell >= 0) Object.assign(catBrain.position, freeSpaceMap.cellCenter(startCell));
+  else { Object.assign(catBrain.position, { x: screenWidth * .8, y: catBrain.edgeLineY }); catBrain.isOnEdge = true; }
+  catBrain.setBehavior('sit', 2);
+  catBrain.isReady = true;
+}
+
+// =====================================================================
+// 9. 技能菜单：以后的截屏、AI 对话等能力都在这里注册
+// =====================================================================
+// 每个技能：{ id, icon, label, run, isChecked?, comingSoon? }，type: 'separator' 为分隔线
+const CAT_SKILLS = [
+  { id: 'drinkWater', icon: '💧', label: '我喝了一杯', run: () => recordDrink() },
+  { id: 'petCat', icon: '🤚', label: '摸摸煤球', run: () => catBrain.pet() },
+  { id: 'peekNow', icon: '👀', label: '去偷看一下', run: () => { if (!catBrain.tryStartPeek(true)) effects.say('附近没有好藏的地方…'); } },
+  { type: 'separator' },
+  { id: 'roamFree', icon: '🐾', label: '自由散步', isChecked: () => catBrain.roamMode === 'free', run: () => catBrain.setRoamMode('free') },
+  { id: 'roamAnchored', icon: '📌', label: '待在这里别动', isChecked: () => catBrain.roamMode === 'anchored', run: () => catBrain.setRoamMode('anchored') },
+  { id: 'roamEdge', icon: '⬇', label: '去屏幕边缘待着', isChecked: () => catBrain.roamMode === 'edge', run: () => catBrain.setRoamMode('edge') },
+  { type: 'separator' },
+  { id: 'screenshot', icon: '📷', label: '截屏', comingSoon: true },
+  { id: 'aiChat', icon: '💬', label: 'AI 对话', comingSoon: true },
+];
+
+const skillMenu = document.getElementById('skillMenu');
+function showSkillMenu(clientX, clientY) {
+  skillMenu.innerHTML = '<div class="menu-title">🐾 煤球的技能</div>';
+  for (const skill of CAT_SKILLS) {
+    if (skill.type === 'separator') { skillMenu.appendChild(document.createElement('hr')); continue; }
+    const item = document.createElement('div');
+    item.className = 'menu-item' + (skill.comingSoon ? ' coming-soon' : '');
+    const suffix = skill.comingSoon ? '<span class="badge">即将推出</span>' : (skill.isChecked?.() ? '<span class="check">✓</span>' : '');
+    item.innerHTML = `<span>${skill.icon}</span><span>${skill.label}</span>${suffix}`;
+    item.addEventListener('click', () => {
+      hideSkillMenu();
+      if (skill.comingSoon) effects.sayLine('coming-soon', { isImportant: true });
+      else skill.run();
+    });
+    skillMenu.appendChild(item);
+  }
+  skillMenu.classList.add('visible');
+  const menuRect = skillMenu.getBoundingClientRect();
+  skillMenu.style.left = Math.min(clientX, innerWidth - menuRect.width - 8) + 'px';
+  skillMenu.style.top = Math.min(clientY, innerHeight - menuRect.height - 8) + 'px';
+}
+function hideSkillMenu() { skillMenu.classList.remove('visible'); }
+
+// =====================================================================
+// 10. 鼠标交互（画布本身不接收事件，用射线检测判断是否点到猫）
+// =====================================================================
+const raycaster = new THREE.Raycaster();
+const pointerNdc = new THREE.Vector2();
+let canvasLeft = 0, canvasTop = 0;
+let lastPointerTime = performance.now();
+
+function isPointerOnCat(clientX, clientY) {
+  // 被藏身窗口挡住（裁掉）的部分不算点到猫
+  const clipRect = catBrain.clipRect;
+  if (clipRect && pointInRectangle(clientX, clientY, clipRect)) return false;
+  const localX = clientX - canvasLeft, localY = clientY - canvasTop;
+  if (localX < 0 || localY < 0 || localX > CAT_CANVAS_SIZE || localY > CAT_CANVAS_SIZE) return false;
+  pointerNdc.set(localX / CAT_CANVAS_SIZE * 2 - 1, -(localY / CAT_CANVAS_SIZE * 2 - 1));
+  raycaster.setFromCamera(pointerNdc, camera);
+  return raycaster.intersectObject(catModel.root, true).length > 0;
+}
+
+let pressState = null;       // 按下猫时记录起点，用来区分单击 / 双击 / 拖动
+let singleClickTimer = null;
+let lastClickTime = 0;
+
+window.addEventListener('pointermove', event => {
+  const now = performance.now();
+  const elapsed = Math.max(1, now - lastPointerTime) / 1000;
+  const instantSpeed = Math.hypot(event.clientX - catBrain.cursor.x, event.clientY - catBrain.cursor.y) / elapsed;
+  catBrain.cursor.speed = catBrain.cursor.x < -1000 ? 0 : damp(catBrain.cursor.speed, instantSpeed, 12, elapsed);
+  catBrain.cursor.x = event.clientX;
+  catBrain.cursor.y = event.clientY;
+  lastPointerTime = now;
+
+  if (pressState) {
+    if (!pressState.isDragging && Math.hypot(event.clientX - pressState.startX, event.clientY - pressState.startY) > 6) {
+      pressState.isDragging = true;
+      catBrain.liftUp();
+    }
+    if (pressState.isDragging) {
+      catBrain.position.x = event.clientX;
+      catBrain.position.y = event.clientY + 105; // 拎着后颈，脚底在鼠标下方
+    }
+    return;
+  }
+  const isOnCat = isPointerOnCat(event.clientX, event.clientY);
+  document.body.style.cursor = isOnCat ? 'grab' : '';
+  if (isOnCat) catBrain.peekCaught(); // 偷看时被鼠标指到：抓包！
+}, true);
+
+// 捕获阶段拦截：点到猫时不让下面的窗口收到事件；点到透明区域则正常穿透
+window.addEventListener('pointerdown', event => {
+  if (skillMenu.classList.contains('visible') && !skillMenu.contains(event.target)) hideSkillMenu();
+  if (event.button !== 0 || !isPointerOnCat(event.clientX, event.clientY)) return;
+  event.stopPropagation();
+  event.preventDefault();
+  pressState = { startX: event.clientX, startY: event.clientY, isDragging: false };
+  document.body.style.cursor = 'grabbing';
+}, true);
+
+window.addEventListener('pointerup', event => {
+  if (!pressState) return;
+  event.stopPropagation();
+  const wasDragging = pressState.isDragging;
+  pressState = null;
+  document.body.style.cursor = '';
+  if (wasDragging) {
+    catBrain.dropAt(event.clientX, event.clientY + 105);
+    return;
+  }
+  // 300 毫秒内第二次点击算双击：记一杯；否则算单击：摸摸
+  const now = performance.now();
+  if (now - lastClickTime < 300) {
+    clearTimeout(singleClickTimer);
+    lastClickTime = 0;
+    recordDrink();
+  } else {
+    lastClickTime = now;
+    singleClickTimer = setTimeout(() => catBrain.pet(), 300);
+  }
+}, true);
+
+// 右键猫：技能菜单
+window.addEventListener('contextmenu', event => {
+  if (!isPointerOnCat(event.clientX, event.clientY)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  showSkillMenu(event.clientX, event.clientY);
+}, true);
+
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  hideSkillMenu();
+  const fullscreenWindow = desktop.windows.find(item => item.isFullscreen);
+  if (fullscreenWindow) desktop.toggleFullscreen(fullscreenWindow);
+});
+
+// ---------- 饮水记录 ----------
+let cupsToday = 0;
+function recordDrink() {
+  cupsToday++;
+  catBrain.drinkRecorded();
+  const reachedGoal = cupsToday === DAILY_GOAL_CUPS;
+  // 达标说专门的台词；1~12 杯按杯数说；更多就说通用的夸奖
+  if (reachedGoal) effects.sayLine('goal-reached', { durationMs: 3500, isImportant: true });
+  else if (pickVoiceLine('drinkCount', cupsToday)) effects.sayLine('drinkCount', { count: cupsToday, isImportant: true });
+  else effects.sayLine('drink-generic', { isImportant: true, fallbackText: `呼噜呼噜～今天第 ${cupsToday} 杯啦 💦` });
+  document.getElementById('trayProgress').textContent = `🐾 ${cupsToday}/${DAILY_GOAL_CUPS}`;
+}
+document.getElementById('drankButton').addEventListener('click', recordDrink);
+document.getElementById('snoozeButton').addEventListener('click', () => catBrain.snooze());
+
+// ---------- 控制面板 ----------
+document.getElementById('remindButton').addEventListener('click', () => catBrain.startRemind());
+document.getElementById('peekButton').addEventListener('click', () => { if (!catBrain.tryStartPeek(true)) effects.say('附近没有好藏的地方…'); });
+document.getElementById('sleepButton').addEventListener('click', () => catBrain.goToSleep());
+document.getElementById('wakeButton').addEventListener('click', () => { if (catBrain.behavior === 'sleep') catBrain.pet(); });
+let newWindowCount = 0;
+document.getElementById('newWindowButton').addEventListener('click', () => {
+  newWindowCount++;
+  desktop.createWindow({
+    title: `记事本 ${newWindowCount}`, appClass: 'app-note', contentHtml: '<div style="padding:12px;font-size:13px">随便写点什么…</div>',
+    left: Math.round(randomBetween(100, innerWidth - 420)), top: Math.round(randomBetween(40, innerHeight - 380)), width: 320, height: 240,
+  });
+});
+document.getElementById('maximizeAllButton').addEventListener('click', () => desktop.windows.forEach(item => desktop.toggleMaximize(item, true)));
+document.getElementById('restoreAllButton').addEventListener('click', () => desktop.windows.forEach(item => {
+  if (item.isFullscreen) desktop.toggleFullscreen(item);
+  desktop.toggleMaximize(item, false);
+  if (item.isMinimized) desktop.setMinimized(item, false);
+}));
+document.getElementById('fullscreenButton').addEventListener('click', () => {
+  const target = desktop.windows.find(item => item.isFullscreen)
+    ?? (desktop.lastActiveWindow && desktop.windows.includes(desktop.lastActiveWindow) ? desktop.lastActiveWindow : desktop.windows[0]);
+  if (target) desktop.toggleFullscreen(target);
+});
+document.querySelectorAll('[data-wallpaper]').forEach(button => button.addEventListener('click', () => {
+  document.getElementById('desktop').className = button.dataset.wallpaper;
+}));
+document.getElementById('voiceEnabledCheckbox').addEventListener('change', event => {
+  catVoice.isEnabled = event.target.checked;
+  if (!catVoice.isEnabled && 'speechSynthesis' in window) speechSynthesis.cancel();
+});
+document.getElementById('voiceModeSelect').addEventListener('change', event => { catVoice.mode = event.target.value; });
+document.getElementById('voiceTestButton').addEventListener('click', () => {
+  effects.sayLine('remind', { isImportant: true, meowKind: 'call' });
+});
+const showFreeSpaceCheckbox = document.getElementById('showFreeSpaceCheckbox');
+showFreeSpaceCheckbox.addEventListener('change', () => overlayNeedsRedraw = true);
+window.addEventListener('resize', () => desktop.onLayoutChange());
+
+// ---------- 空闲区域可视化 ----------
+const overlayCanvas = document.getElementById('freeSpaceOverlay');
+const overlayContext = overlayCanvas.getContext('2d');
+function drawFreeSpaceOverlay() {
+  if (overlayCanvas.width !== innerWidth || overlayCanvas.height !== innerHeight) {
+    overlayCanvas.width = innerWidth;
+    overlayCanvas.height = innerHeight;
+  }
+  overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if (!showFreeSpaceCheckbox.checked) return;
+  overlayContext.fillStyle = 'rgba(80, 230, 140, .35)';
+  for (let index = 0; index < freeSpaceMap.freeCells.length; index++) {
+    if (!freeSpaceMap.freeCells[index]) continue;
+    const center = freeSpaceMap.cellCenter(index);
+    overlayContext.beginPath();
+    overlayContext.arc(center.x, center.y, 2.5, 0, Math.PI * 2);
+    overlayContext.fill();
+  }
+  if (catBrain.path.length) {
+    overlayContext.strokeStyle = 'rgba(255, 220, 90, .9)';
+    overlayContext.lineWidth = 2;
+    overlayContext.setLineDash([6, 5]);
+    overlayContext.beginPath();
+    overlayContext.moveTo(catBrain.position.x, catBrain.position.y);
+    catBrain.path.forEach(point => overlayContext.lineTo(point.x, point.y));
+    overlayContext.stroke();
+    overlayContext.setLineDash([]);
+  }
+  const geometry = catBrain.peekGeometry;
+  if (geometry) {
+    overlayContext.strokeStyle = 'rgba(255, 120, 200, .8)';
+    overlayContext.strokeRect(geometry.headArea.left, geometry.headArea.top, geometry.headArea.right - geometry.headArea.left, geometry.headArea.bottom - geometry.headArea.top);
+  }
+}
+
+// ---------- 主循环：逻辑每帧更新，渲染按帧率上限节流 ----------
+let lastFrameTime = performance.now();
+let lastRenderTime = 0;
+let renderedFrameCount = 0, measuredFps = 0, fpsWindowStart = performance.now();
+const statusText = document.getElementById('statusText');
+
+function updateCanvasClip() {
+  // 偷看时：把猫和藏身窗口重叠的部分裁成透明（用 evenodd 在画布上挖一个洞）
+  const clipRect = catBrain.clipRect;
+  if (!clipRect) { catCanvas.style.clipPath = ''; return; }
+  const size = CAT_CANVAS_SIZE;
+  const holeLeft = clamp(clipRect.left - canvasLeft, 0, size), holeRight = clamp(clipRect.right - canvasLeft, 0, size);
+  const holeTop = clamp(clipRect.top - canvasTop, 0, size), holeBottom = clamp(clipRect.bottom - canvasTop, 0, size);
+  catCanvas.style.clipPath = `polygon(evenodd, 0 0, ${size}px 0, ${size}px ${size}px, 0 ${size}px, 0 0, ` +
+    `${holeLeft}px ${holeTop}px, ${holeRight}px ${holeTop}px, ${holeRight}px ${holeBottom}px, ${holeLeft}px ${holeBottom}px, ${holeLeft}px ${holeTop}px)`;
+}
+
+function mainLoop(now) {
+  requestAnimationFrame(mainLoop);
+  const deltaSeconds = Math.min(.05, (now - lastFrameTime) / 1000);
+  lastFrameTime = now;
+  catBrain.cursor.speed = damp(catBrain.cursor.speed, 0, 4, deltaSeconds); // 鼠标停下后速度逐渐归零
+  catBrain.update(deltaSeconds);
+
+  const frameInterval = 1000 / (catBrain.behavior === 'sleep' ? SLEEP_FPS : ACTIVE_FPS);
+  if (now - lastRenderTime < frameInterval - 1) return;
+  const renderDeltaSeconds = Math.min(.12, (now - lastRenderTime) / 1000);
+  lastRenderTime = now;
+
+  catModel.root.rotation.y = catBrain.yaw;
+  catModel.update(catBrain.buildTargetPose(), catBrain.walkPhase, catBrain.elapsedSeconds, renderDeltaSeconds);
+  renderer.render(scene, camera);
+
+  // 画布跟着猫走（正式版里是 Rust 移动整个小窗口）
+  canvasLeft = Math.round(catBrain.position.x - groundPointOnCanvas.x);
+  canvasTop = Math.round(catBrain.position.y - groundPointOnCanvas.y);
+  catCanvas.style.transform = `translate(${canvasLeft}px, ${canvasTop}px)`;
+  updateCanvasClip();
+
+  // 气泡跟在猫头顶
+  const head = catBrain.headPosition;
+  speechBubble.style.left = clamp(head.x - 115, 8, innerWidth - 240) + 'px';
+  speechBubble.style.top = Math.max(8, head.y - 75 - speechBubble.offsetHeight) + 'px';
+
+  if (showFreeSpaceCheckbox.checked || overlayNeedsRedraw) { drawFreeSpaceOverlay(); overlayNeedsRedraw = false; }
+
+  renderedFrameCount++;
+  if (now - fpsWindowStart > 1000) {
+    measuredFps = Math.round(renderedFrameCount * 1000 / (now - fpsWindowStart));
+    renderedFrameCount = 0;
+    fpsWindowStart = now;
+    const clock = new Date();
+    document.getElementById('trayClock').textContent = `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`;
+  }
+  statusText.innerHTML = `状态：<b>${BEHAVIOR_LABELS[catBrain.behavior] ?? catBrain.behavior}</b><br>
+    模式：${ROAM_MODE_LABELS[catBrain.roamMode]}${catBrain.isOnEdge ? '（在底边）' : ''}<br>
+    今日 ${cupsToday}/${DAILY_GOAL_CUPS} 杯 · 空闲格子 ${freeSpaceMap.freeCellCount} · 渲染 ${measuredFps} fps`;
+}
+
+document.getElementById('loadingTip').remove();
+requestAnimationFrame(mainLoop);
+
+// 方便调试：在控制台里可以直接操作
+window.catDebug = {
+  catBrain, catModel, desktop, freeSpaceMap, peekPlanner, catVoice,
+  // 直接把猫放到某个藏身处开始探头（调参用）
+  forcePeek(spot) {
+    const geometry = peekPlanner.geometryOf(spot);
+    if (!geometry) return 'invalid';
+    catBrain.peek = { spot, peekCount: 0, lastAnchor: { ...geometry.anchor } };
+    Object.assign(catBrain.position, geometry.hiddenPoint);
+    catBrain.yaw = catBrain.targetYaw = geometry.outYaw;
+    catBrain.peekPopOut();
+    return 'ok';
+  },
+};
+</script>
+</body>
+</html>

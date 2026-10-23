@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>煤球 · 造型预览</title>
+  <style>
+    body { margin: 0; padding: 20px; font-family: "Microsoft YaHei UI", system-ui, sans-serif; background: #f2f0eb; }
+    h1 { font-size: 20px; margin: 0 0 14px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 260px); gap: 14px; }
+    .cell { border-radius: 12px; overflow: hidden; text-align: center; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .stage { height: 250px; display: flex; align-items: center; justify-content: center; }
+    .stage.light { background: linear-gradient(160deg, #e8eef6, #ffffff); }
+    .stage.blue { background: linear-gradient(160deg, #4b6a8f, #23314a); }
+    .stage.dark { background: #111116; }
+    .caption { padding: 8px; font-size: 13px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>🐾 煤球 · 动漫风格造型预览</h1>
+  <div class="grid" id="grid"></div>
+  <script type="module" src="/src/preview/main.ts"></script>
+</body>
+</html>

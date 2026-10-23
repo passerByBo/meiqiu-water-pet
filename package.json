@@ -1,0 +1,27 @@
+{
+  "name": "meiqiu-water-pet",
+  "private": true,
+  "version": "0.1.0",
+  "description": "煤球 · 桌面喝水黑猫",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "tauri": "tauri",
+    "voice:generate": "node tools/voice-generator/generate-voice-lines.mjs --output=public/voice"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "three": "^0.186.1",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.5",
+    "vue-tsc": "^3.3.13"
+  }
+}

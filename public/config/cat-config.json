@@ -1,0 +1,87 @@
+{
+  "description": "煤球的通用配置：说话频率、各种情境下说什么。改这个文件就能调整，不用改代码。也可以在 %APPDATA%\\com.meiqiu.waterpet\\config\\cat-config.json 放一份覆盖它（只写想改的部分）",
+
+  "chattiness": {
+    "description": "话多程度：每档规定闲聊之间至少隔多久、闲聊时有多大概率真的开口；互动回应之间至少隔多久",
+    "levels": {
+      "quiet":  { "ambientMinGapSeconds": 900, "ambientChance": 0.3, "interactionMinGapSeconds": 30 },
+      "normal": { "ambientMinGapSeconds": 300, "ambientChance": 0.5, "interactionMinGapSeconds": 15 },
+      "chatty": { "ambientMinGapSeconds": 90,  "ambientChance": 0.9, "interactionMinGapSeconds": 5 }
+    }
+  },
+
+  "lineKinds": {
+    "description": "每类台词属于哪种：essential 必须说（提醒、喝水回应）/ interaction 你操作后的回应 / ambient 闲聊（巡视点评、捣乱、心情）。支持用 * 结尾做前缀匹配",
+    "essential": ["remind*", "goal-*", "drink*", "custom-*", "snooze", "greeting", "greet-*", "wake-up-01", "welcome-back-01", "focus-long", "mode-*", "drop-*", "coming-soon", "peek-start-01"],
+    "interaction": ["peekCaught", "peek-petted-01", "lifted-01", "mood-dodge", "mischief-caught-cursor"],
+    "ambient": ["react-*", "mischief-*", "mood-*", "squeezed-01", "scared-01", "peek-cover-gone", "peek-give-up"]
+  },
+
+  "situations": {
+    "description": "每种情境的规则：条件都满足的规则参与抽签，按 weight 加权随机选一个台词分组，再从分组里挑一句最近没说过的。条件写法见 src/pet/dialogueSelector.ts",
+
+    "greeting": [
+      { "group": "greet-back",           "weight": 8, "when": { "cupsAtLeast": 1 } },
+      { "group": "greet-monday",         "weight": 3, "when": { "weekday": [1], "timeBetween": ["05:00", "12:00"] } },
+      { "group": "greet-friday",         "weight": 3, "when": { "weekday": [5] } },
+      { "group": "greet-streak",         "weight": 3, "when": { "streakAtLeast": 3 } },
+      { "group": "greet-yesterday-good", "weight": 2, "when": { "yesterdayReached": true } },
+      { "group": "greet-yesterday-bad",  "weight": 2, "when": { "yesterdayReached": false, "hasHistory": true } },
+      { "group": "greet-morning",        "weight": 2, "when": { "timeBetween": ["05:00", "11:00"] } },
+      { "group": "greet-noon",           "weight": 2, "when": { "timeBetween": ["11:00", "13:30"] } },
+      { "group": "greet-afternoon",      "weight": 2, "when": { "timeBetween": ["13:30", "18:00"] } },
+      { "group": "greet-evening",        "weight": 2, "when": { "timeBetween": ["18:00", "22:00"] } },
+      { "group": "greet-late",           "weight": 3, "when": { "timeBetween": ["22:00", "05:00"] } },
+      { "group": "greeting",             "weight": 1 }
+    ],
+
+    "waterReminder": [
+      { "group": "remind-first-cup",   "weight": 100, "when": { "reason": ["firstCup"] } },
+      { "group": "remind-knock",       "weight": 100, "when": { "style": ["knock"] } },
+      { "group": "remind-sit-window",  "weight": 100, "when": { "style": ["sitOnWindow"] } },
+      { "group": "remind-push-cup",    "weight": 100, "when": { "style": ["pushCup"] } },
+      { "group": "remindAngry",        "weight": 50,  "when": { "escalationLevelAtLeast": 2 } },
+      { "group": "remindThirsty",      "weight": 50,  "when": { "escalationLevelAtLeast": 1 } },
+      { "group": "remind-after-goal",  "weight": 20,  "when": { "goalReached": true } },
+      { "group": "remind-last-cup",    "weight": 8,   "when": { "remainingCups": [1, 1] } },
+      { "group": "remind-far-behind",  "weight": 6,   "when": { "deficitAtLeast": 3, "goalReached": false } },
+      { "group": "remind-behind",      "weight": 4,   "when": { "deficitAtLeast": 1.5, "goalReached": false } },
+      { "group": "remind-ahead",       "weight": 3,   "when": { "deficitAtMost": -1, "goalReached": false } },
+      { "group": "remind-ontrack",     "weight": 2,   "when": { "deficitAtLeast": -1, "deficitAtMost": 1.5 } },
+      { "group": "remind",             "weight": 2,   "when": { "goalReached": false } },
+      { "group": "remind-time-morning",    "weight": 2, "when": { "timeBetween": ["05:00", "10:30"] } },
+      { "group": "remind-time-afterlunch", "weight": 2, "when": { "timeBetween": ["12:30", "14:00"] } },
+      { "group": "remind-time-sleepy",     "weight": 2, "when": { "timeBetween": ["14:00", "16:30"] } },
+      { "group": "remind-time-evening",    "weight": 2, "when": { "timeBetween": ["17:00", "23:00"] } },
+      { "group": "remind-code",     "weight": 2, "when": { "activity": ["code"] } },
+      { "group": "remind-chat",     "weight": 2, "when": { "activity": ["chat"] } },
+      { "group": "remind-sheet",    "weight": 2, "when": { "activity": ["sheet"] } },
+      { "group": "remind-doc",      "weight": 2, "when": { "activity": ["doc", "slides"] } },
+      { "group": "remind-browser",  "weight": 2, "when": { "activity": ["browser"] } },
+      { "group": "remind-shopping", "weight": 2, "when": { "activity": ["shopping"] } },
+      { "group": "remind-mood-happy",  "weight": 1, "when": { "mood": ["happy"] } },
+      { "group": "remind-mood-grumpy", "weight": 2, "when": { "mood": ["grumpy", "angry"] } }
+    ],
+
+    "goalCheck": [
+      { "group": "goal-check-{remaining}", "weight": 1 }
+    ],
+
+    "drinkResponse": [
+      { "group": "goal-reached",     "weight": 100, "when": { "justReachedGoal": true } },
+      { "group": "drink-fast",       "weight": 4, "when": { "hadReminder": true, "responseSecondsAtMost": 120 } },
+      { "group": "drink-slow",       "weight": 4, "when": { "hadReminder": true, "responseSecondsAtLeast": 600 } },
+      { "group": "drink-self",       "weight": 3, "when": { "hadReminder": false, "goalReached": false } },
+      { "group": "drink-half",       "weight": 3, "when": { "isHalfway": true } },
+      { "group": "drink-almost",     "weight": 4, "when": { "remainingCups": [1, 2] } },
+      { "group": "drink-after-goal", "weight": 4, "when": { "cupsAboveGoal": true } },
+      { "group": "drinkCount",       "weight": 2, "when": { "goalReached": false } },
+      { "group": "drink-generic",    "weight": 1 }
+    ]
+  },
+
+  "reactions": {
+    "description": "巡视时同一类软件至少隔多久才再点评一次（秒）",
+    "sameCategoryMinGapSeconds": 1800
+  }
+}
