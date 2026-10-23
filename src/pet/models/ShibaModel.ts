@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose, POSE_NAMES } from '../BlackCatModel';
-import { Blinker, createAnimeEye, EYE_PALETTES, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
+import { Blinker, createAccessoryMeshes, createAnimeEye, CupProp, EYE_PALETTES, showAccessory, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
 const COLORS = {
   fur: 0xd8742c,        // 赤褐色（参考图里偏红的橘棕色）
@@ -84,6 +84,8 @@ export class ShibaModel implements PetModel {
   private readonly bell = new THREE.Group();
   private readonly shadow: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly sign = new SignProp();
+  private readonly cup: CupProp;
+  private readonly accessories: Record<string, THREE.Group>;
 
   constructor() {
     const builder = new ModelBuilder({ outlineColor: 0x3a1f10, outlineThickness: .023, rimColor: 0xffe7c8 });
@@ -238,6 +240,20 @@ export class ShibaModel implements PetModel {
 
     this.sign.group.position.set(0, .42, .72);
     this.root.add(this.sign.group);
+    this.cup = new CupProp(builder, new THREE.Vector3(.46, 0, .6));
+    this.root.add(this.cup.group);
+
+    // 装扮：小花、蝴蝶结戴在耳根旁边；皇冠戴在两只耳朵中间；围巾围在项圈上（跟着项圈一起保持水平）
+    this.accessories = createAccessoryMeshes(builder, .25);
+    const { flower, bow, crown, scarf } = this.accessories;
+    flower.position.set(.22, .2, .22);
+    flower.rotation.set(-.2, .5, 0);
+    bow.position.set(-.22, .22, .17);
+    bow.rotation.set(-.15, -.5, .25);
+    crown.position.set(0, .35, -.02);
+    crown.rotation.x = -.12;
+    this.head.add(flower, bow, crown);
+    this.collarGroup.add(scarf);
   }
 
   /** 沿曲线生成一根粗细变化的管子：根部粗、中间蓬松、尾巴尖细一点（两端封口，看起来是一整根） */
@@ -370,6 +386,7 @@ export class ShibaModel implements PetModel {
       + Math.sin(spin) * .7 * propellerAmount;
 
     this.sign.update(pose.holdSign, elapsedSeconds);
+    this.cup.update(pose.cupVisible, pose.cupPush);
     this.shadow.material.opacity = (1 - pose.lifted) * (1 - pose.airborne * .6);
   }
 
@@ -377,7 +394,8 @@ export class ShibaModel implements PetModel {
     this.sign.setText(text);
   }
 
-  setAccessory(_id: string): void {
-    // 装扮在编码阶段加
+  /** 穿上装扮（none 或 flower / bow / scarf / crown） */
+  setAccessory(id: string): void {
+    showAccessory(this.accessories, id);
   }
 }

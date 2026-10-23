@@ -161,6 +161,10 @@ export interface CustomReminderFiredPayload {
 
 /** 用户设置（字段和 Rust 端 settings.rs 一一对应） */
 export interface AppSettings {
+  /** 现在养的是哪种动物 */
+  petSpecies: 'cat' | 'hamster' | 'shiba' | 'goldfish';
+  /** 每种动物的名字（没改过的不在里面，用默认名字） */
+  petNames: Partial<Record<'cat' | 'hamster' | 'shiba' | 'goldfish', string>>;
   /** 怎么称呼主人（空着就叫"你"） */
   ownerName: string;
   // 作息

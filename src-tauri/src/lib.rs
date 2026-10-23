@@ -66,11 +66,12 @@ pub fn run() {
             // 本地数据库（喝水记录、提醒记录、心情等），放在 %APPDATA%\com.meiqiu.waterpet
             let data_directory = app.path().app_data_dir()?;
             let database = storage::Database::open(&data_directory).map_err(|error| Box::<dyn std::error::Error>::from(error))?;
-            app.manage(mood::CatMood::load(&database));
+            // 先读设置（知道现在养的是哪种动物），再读这只动物的心情和亲密度
+            let current_settings = settings::load(app.handle());
+            app.manage(mood::CatMood::load(&database, &current_settings.pet_species));
             app.manage(database);
 
-            // 先读设置，再按设置创建提醒调度；托盘要在应用设置前建好，才能同步勾选状态
-            let current_settings = settings::load(app.handle());
+            // 按设置创建提醒调度；托盘要在应用设置前建好，才能同步勾选状态
             app.manage(settings::SettingsState(Mutex::new(current_settings.clone())));
             app.manage(reminder::ReminderState::new(&current_settings));
             tray::create(app.handle(), &current_settings)?;

@@ -39,6 +39,12 @@ export type CatPlace = 'floor' | 'window' | 'edge' | 'anchored';
 
 /** 动作的条件：写了的都要满足，不写的不限制 */
 export interface ActionConditions {
+  /** 只有这几种动物会做（cat 黑猫 / hamster 仓鼠 / shiba 柴犬 / goldfish 金鱼）；不写 = 所有动物通用 */
+  species?: string[];
+  /** 这几种动物不做 */
+  speciesNot?: string[];
+  /** 要有腿才能做（舔爪子、挠痒痒、伸懒腰……金鱼做不了） */
+  hasLegs?: boolean;
   mood?: MoodLevel[];
   routinePhase?: RoutinePhase[];
   /** 你正在用的软件分类（chat、code、browser、video、meeting……） */
@@ -123,6 +129,8 @@ export interface ActionDefinition {
 /** 挑选动作时的"现场情况" */
 export interface ActionContext {
   trigger: ActionTrigger;
+  species: string;
+  hasLegs: boolean;
   place: CatPlace;
   mood: MoodLevel;
   intimacy: number;
@@ -232,6 +240,9 @@ class ActionLibrary {
     if (!conditions) return true;
     const weekday = context.now.getDay() === 0 ? 7 : context.now.getDay();
     const checks: [unknown, () => boolean][] = [
+      [conditions.species, () => conditions.species!.includes(context.species)],
+      [conditions.speciesNot, () => !conditions.speciesNot!.includes(context.species)],
+      [conditions.hasLegs, () => context.hasLegs === conditions.hasLegs],
       [conditions.mood, () => conditions.mood!.includes(context.mood)],
       [conditions.routinePhase, () => conditions.routinePhase!.includes(context.routinePhase)],
       [conditions.activity, () => conditions.activity!.includes(context.activity)],

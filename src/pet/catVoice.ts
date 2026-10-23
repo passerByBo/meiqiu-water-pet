@@ -1,8 +1,11 @@
-// 声音：Web Audio 合成猫叫 + 播放预生成的台词语音（萌丫头音色）+ 系统语音兜底
+// 声音：Web Audio 合成叫声（猫叫 / 仓鼠吱吱 / 柴犬汪汪 / 金鱼咕噜）+ 播放预生成的台词语音 + 系统语音兜底
+// 每种动物有自己的一套预生成语音：猫在 public/voice/，其它动物在 public/voice/<种类>/
 // 所有声音都经过"播放队列"：一次只放一个，重要的插队，过时的丢弃，避免互相打断或叠在一起
 import { SPEAK_COOLDOWN_SECONDS } from './constants';
 import type { VoiceMode } from '../shared/backendApi';
 import { pickRandom } from '../shared/geometry';
+import type { PetSpecies } from './species';
+import { playGoldfishSound, playHamsterSound, playShibaSound } from './speciesSounds';
 
 export type MeowKind = 'call' | 'short' | 'question' | 'scared' | 'complain';
 /** 音效：敲窗户、杯子摔碎、跳跃 */
@@ -85,15 +88,28 @@ class CatVoice {
   private currentAudio: HTMLAudioElement | null = null;
   private lastNormalSpeechTime = -Infinity;
   private recentLineIds: string[] = [];
+  /** 现在是哪种动物（决定叫声和用哪套语音） */
+  private species: PetSpecies = 'cat';
+  /** 这种动物的语音文件夹 */
+  private voiceFolder = '/voice';
 
-  /** 读取预生成语音清单（public/voice/voice-manifest.json） */
-  async loadManifest(): Promise<void> {
+  /**
+   * 读取某种动物的预生成语音清单（猫：public/voice/voice-manifest.json；其它：public/voice/<种类>/voice-manifest.json）。
+   * 这种动物还没有生成语音时，台词只显示文字（不会用别的动物的声音）
+   */
+  async loadManifest(species: PetSpecies = 'cat'): Promise<void> {
+    this.stopAll();
+    this.species = species;
+    this.voiceFolder = species === 'cat' ? '/voice' : `/voice/${species}`;
+    this.voiceLines = [];
+    this.recentLineIds = [];
     try {
-      const response = await fetch('/voice/voice-manifest.json');
+      const response = await fetch(`${this.voiceFolder}/voice-manifest.json`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const manifest = await response.json() as { lines: VoiceLine[] };
       this.voiceLines = manifest.lines ?? [];
     } catch (error) {
-      console.warn('没有找到预生成语音，将使用系统语音', error);
+      console.warn(`没有找到${species}的预生成语音，台词只显示文字`, error);
     }
   }
 
@@ -285,7 +301,9 @@ class CatVoice {
   private async playTask(task: VoiceTask, token: number): Promise<void> {
     if (task.isPurr) {
       task.onStart?.(PURR_SECONDS * 1000);
-      await this.synthesizePurr(PURR_SECONDS);
+      // 满足的声音：猫呼噜、仓鼠小声吱吱、柴犬哈哈喘气、金鱼咕噜咕噜冒泡
+      if (this.species === 'cat') await this.synthesizePurr(PURR_SECONDS);
+      else await this.playSpeciesSound('content');
       return;
     }
     const speechText = task.line?.text ?? (task.shouldSpeakFallback ? task.fallbackText : '');
@@ -293,7 +311,7 @@ class CatVoice {
     if (task.meowKind) {
       // 只有猫叫、或者"只有猫叫"模式：字幕跟着猫叫一起出现
       if (!willSpeak) task.onStart?.(MEOW_PRESETS[task.meowKind].duration * 1000 + 1500);
-      await this.synthesizeMeow(task.meowKind);
+      await this.playCall(task.meowKind);
       if (token !== this.playbackToken) return;
       if (willSpeak) await this.sleep(MEOW_TO_SPEECH_GAP_MILLISECONDS);
     } else if (!willSpeak) {
@@ -311,6 +329,18 @@ class CatVoice {
     this.audioContext ??= new AudioContext();
     if (this.audioContext.state === 'suspended') void this.audioContext.resume();
     return this.audioContext;
+  }
+
+  /** 叫一声：按动物换成猫叫 / 吱吱 / 汪汪 / 咕噜 */
+  private playCall(kind: MeowKind): Promise<void> {
+    return this.species === 'cat' ? this.synthesizeMeow(kind) : this.playSpeciesSound(kind);
+  }
+
+  private playSpeciesSound(kind: MeowKind | 'content'): Promise<void> {
+    const options = { context: this.ensureAudioContext(), volume: this.volume };
+    if (this.species === 'hamster') return playHamsterSound(kind, options);
+    if (this.species === 'shiba') return playShibaSound(kind, options);
+    return playGoldfishSound(kind, options);
   }
 
   /** 合成一声猫叫：锯齿波经过共振峰滤波（"咿→啊→呜"的口型变化），音高先升后降，带轻微颤音 */
@@ -391,7 +421,7 @@ class CatVoice {
   /** 播放预生成的台词 mp3；文件缺失或播放失败时退回系统语音 */
   private playAudioFile(line: VoiceLine, task: VoiceTask, token: number): Promise<void> {
     return new Promise(resolve => {
-      const audio = new Audio(`/voice/${line.file}`);
+      const audio = new Audio(`${this.voiceFolder}/${line.file}`);
       audio.volume = this.volume;
       this.currentAudio = audio;
       audio.addEventListener('ended', () => resolve(), { once: true });
@@ -415,7 +445,8 @@ class CatVoice {
       speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(spokenText);
       utterance.lang = 'zh-CN';
-      utterance.pitch = 1.7; // 调高音调，更像小猫
+      // 调高音调，更像小动物（仓鼠最尖，柴犬低一点）
+      utterance.pitch = this.species === 'hamster' ? 2 : this.species === 'shiba' ? 1.4 : 1.7;
       utterance.volume = this.volume;
       utterance.onstart = () => task.onStart?.(spokenText.length * 220);
       utterance.onend = () => resolve();

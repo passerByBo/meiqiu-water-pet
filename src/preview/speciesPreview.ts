@@ -35,6 +35,8 @@ interface PoseColumn {
   isTurntable?: boolean;
   /** 特有动作这一列：轮换播放 */
   isSpecial?: boolean;
+  /** 装扮这一列：四种装扮轮换着穿 */
+  isAccessory?: boolean;
   setPose: (pose: CatPose, species: Species) => void;
 }
 
@@ -68,6 +70,7 @@ const COLUMNS: PoseColumn[] = [
   { title: '举牌提醒', background: 'light', yaw: 0, setPose: pose => { only(pose, 'sit'); pose.holdSign = 1; pose.pawsOnLedge = .7; pose.earPerk = 1; pose.tailLift = .8; } },
   { title: '特有动作', background: 'blue', yaw: .2, isSpecial: true, setPose: (pose, species) => species.specials[0].apply(pose) },
   { title: '旋转一圈', background: 'light', yaw: 0, isTurntable: true, setPose: pose => { only(pose, 'sit'); pose.tailLift = .5; } },
+  { title: '装扮（轮换）', background: 'light', yaw: .3, isAccessory: true, setPose: pose => { only(pose, 'sit'); pose.tailLift = .5; } },
 ];
 
 // ---- 页面上的格子（背景和文字），3D 画在上面盖着的一张大画布上 ----
@@ -169,6 +172,11 @@ function animate(now: number): void {
         const caption = specialCaptions.get(cell.species);
         if (caption) caption.textContent = cell.species.specials[index].title;
       }
+    }
+    if (cell.column.isAccessory) {
+      // 网址参数 ?accessory=crown 可以直接看某一件
+      const accessories = ['flower', 'bow', 'scarf', 'crown'];
+      cell.model.setAccessory(searchParams.get('accessory') ?? accessories[Math.floor(elapsedSeconds / 2.5) % accessories.length]);
     }
     if (cell.column.isWalking) {
       cell.walkPhase += deltaSeconds * 8;

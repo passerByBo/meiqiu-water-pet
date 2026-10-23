@@ -1,9 +1,10 @@
 //! 用户设置：提醒、饮水、声音、散步、系统五组。
 //! 保存在本机配置目录的 settings.json，修改后立即生效并通知所有窗口。
 
-use crate::{reminder, tray};
+use crate::{mood, reminder, tray};
 use chrono::NaiveTime;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -16,6 +17,8 @@ const STATISTICS_WINDOW_LABEL: &str = "statistics";
 const TIME_FORMAT: &str = "%H:%M";
 const MAX_QUIET_PERIODS: usize = 5;
 const MAX_CUSTOM_REMINDERS: usize = 10;
+/// 可以养的动物
+pub const PET_SPECIES: [&str; 4] = ["cat", "hamster", "shiba", "goldfish"];
 
 /// 一个时间段（例如午休 11:30–13:00）
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -159,6 +162,12 @@ fn default_custom_reminders() -> Vec<CustomReminder> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
+    // ---- 宠物 ----
+    /// 现在养的是哪种动物：cat 黑猫 / hamster 仓鼠 / shiba 柴犬 / goldfish 金鱼（喝水数据大家共用，心情亲密度每只各自的）
+    pub pet_species: String,
+    /// 每种动物的名字（没改过的用默认名字：煤球 / 团子 / 小柴 / 墨墨）
+    pub pet_names: HashMap<String, String>,
+
     // ---- 主人 ----
     /// 怎么称呼主人（气泡文字里用，空着就叫"你"）
     pub owner_name: String,
@@ -219,6 +228,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            pet_species: "cat".into(),
+            pet_names: HashMap::new(),
             owner_name: String::new(),
             work_hours: TimePeriod { enabled: true, start: "09:00".into(), end: "17:30".into() },
             work_weekdays: vec![1, 2, 3, 4, 5],
@@ -255,7 +266,22 @@ fn choose_allowed(value: String, allowed: &[&str], fallback: &str) -> String {
     }
 }
 
+/// 每种动物的默认名字
+fn default_pet_name(species: &str) -> &'static str {
+    match species {
+        "hamster" => "团子",
+        "shiba" => "小柴",
+        "goldfish" => "墨墨",
+        _ => "煤球",
+    }
+}
+
 impl Settings {
+    /// 现在这只宠物的名字（托盘提示、窗口标题用）
+    pub fn current_pet_name(&self) -> String {
+        self.pet_names.get(&self.pet_species).cloned().unwrap_or_else(|| default_pet_name(&self.pet_species).to_string())
+    }
+
     /// 把不合法的值修正到允许范围内（防止手改配置文件或前端传错）
     fn sanitized(mut self) -> Self {
         self.remind_interval_minutes = self.remind_interval_minutes.clamp(15, 180);
@@ -270,6 +296,15 @@ impl Settings {
         self.mischief_level = choose_allowed(self.mischief_level, &["off", "sometimes", "often"], "sometimes");
         self.cat_size_percent = self.cat_size_percent.clamp(50, 125);
         self.chattiness = choose_allowed(self.chattiness, &["quiet", "normal", "chatty"], "normal");
+        self.pet_species = choose_allowed(self.pet_species, &PET_SPECIES, "cat");
+        // 名字：只保留认识的动物，去掉首尾空格和控制字符，最多 8 个字，空的去掉（用默认名字）
+        self.pet_names = self
+            .pet_names
+            .into_iter()
+            .filter(|(species, _)| PET_SPECIES.contains(&species.as_str()))
+            .map(|(species, name)| (species, name.trim().chars().filter(|character| !character.is_control()).take(8).collect::<String>()))
+            .filter(|(_, name)| !name.is_empty())
+            .collect();
         self.work_hours = self.work_hours.sanitized("09:00", "17:30");
         self.lunch_break = self.lunch_break.sanitized("11:30", "13:00");
         self.work_weekdays.retain(|day| (1..=7).contains(day));
@@ -358,6 +393,7 @@ fn apply_launch_at_startup(app: &AppHandle, enabled: bool) -> Result<(), String>
 /// 把设置应用到各个模块
 pub fn apply(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     apply_launch_at_startup(app, settings.launch_at_startup)?;
+    mood::switch_species(app, &settings.pet_species);
     reminder::apply_settings(app, settings);
     tray::sync_settings(app, settings);
     Ok(())

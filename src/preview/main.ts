@@ -38,7 +38,7 @@ const scenes = PREVIEW_CASES.map(previewCase => {
   const scene = new PetScene(cell.querySelector('canvas')!);
   const pose = createDefaultPose();
   previewCase.setPose(pose);
-  scene.catModel.root.rotation.y = previewCase.yaw;
+  scene.petModel.root.rotation.y = previewCase.yaw;
   return { scene, pose, previewCase, walkPhase: 0 };
 });
 
@@ -54,7 +54,7 @@ function animate(now: number): void {
       item.walkPhase += deltaSeconds * 8;
       item.pose.walkAmount = 1;
     }
-    item.scene.catModel.update(item.pose, item.walkPhase, elapsedSeconds, deltaSeconds);
+    item.scene.petModel.update(item.pose, item.walkPhase, elapsedSeconds, deltaSeconds);
     item.scene.render();
   }
 }

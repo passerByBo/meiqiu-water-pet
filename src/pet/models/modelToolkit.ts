@@ -446,6 +446,94 @@ export class SignProp {
   }
 }
 
+// ---------------- 装扮（喝水达标解锁） ----------------
+
+/**
+ * 四种装扮的造型（所有动物共用，各模型自己决定戴在哪儿）：
+ *   flower 小花发卡 / bow 粉色蝴蝶结 / crown 小皇冠：在自己的坐标里朝前（+z）
+ *   scarf 暖暖小围巾：一个水平的圈（围着 y 轴），半径 scarfRadius，围巾尾巴垂在正前方
+ */
+export function createAccessoryMeshes(builder: ModelBuilder, scarfRadius: number): Record<'flower' | 'bow' | 'crown' | 'scarf', THREE.Group> {
+  // 小花：五片花瓣 + 黄色花心
+  const flower = new THREE.Group();
+  const petalMaterial = builder.toon(0xffd1e0, .15);
+  for (let index = 0; index < 5; index++) {
+    const angle = index / 5 * Math.PI * 2;
+    flower.add(builder.ellipsoid(petalMaterial, .045, .045, .02, Math.cos(angle) * .05, Math.sin(angle) * .05, 0));
+  }
+  flower.add(builder.ellipsoid(builder.toon(0xffd23f, .2), .028, .028, .022, 0, 0, .012));
+  // 蝴蝶结：两个圆鼓鼓的翅膀 + 中间的结
+  const bow = new THREE.Group();
+  const bowMaterial = builder.toon(0xff6fa0, .2);
+  for (const side of [-1, 1]) {
+    const wing = builder.ellipsoid(bowMaterial, .07, .048, .03, side * .065, 0, 0);
+    wing.rotation.z = side * -.35;
+    bow.add(wing);
+  }
+  bow.add(builder.ellipsoid(bowMaterial, .03, .032, .032));
+  // 皇冠：金色圆环 + 五个尖尖 + 红宝石
+  const crown = new THREE.Group();
+  const goldMaterial = builder.toon(0xf5c542, .45);
+  const crownBand = builder.withOutline(new THREE.Mesh(new THREE.CylinderGeometry(.12, .11, .07, 24, 1, true), goldMaterial));
+  crownBand.material.side = THREE.DoubleSide;
+  crown.add(crownBand);
+  for (let index = 0; index < 5; index++) {
+    const angle = index / 5 * Math.PI * 2;
+    const spike = builder.withOutline(new THREE.Mesh(new THREE.ConeGeometry(.026, .07, 10), goldMaterial));
+    spike.position.set(Math.sin(angle) * .115, .065, Math.cos(angle) * .115);
+    crown.add(spike);
+  }
+  crown.add(builder.ellipsoid(builder.toon(0xe8424f, .4), .025, .025, .012, 0, 0, .118));
+  // 围巾：一个圈 + 前面垂下来的一截（带一道白条纹）
+  const scarf = new THREE.Group();
+  const scarfMaterial = builder.toon(0x5fa8e8, .2);
+  const ring = builder.withOutline(new THREE.Mesh(new THREE.TorusGeometry(scarfRadius, .06, 12, 56), scarfMaterial));
+  ring.rotation.x = Math.PI / 2;
+  const tail = builder.ellipsoid(scarfMaterial, .065, .12, .028, scarfRadius * .4, -.13, scarfRadius * .92);
+  tail.rotation.set(.1, 0, .25);
+  const stripe = builder.ellipsoid(builder.toon(0xffffff, .1), .067, .018, .03, scarfRadius * .4, -.19, scarfRadius * .93, false);
+  stripe.rotation.set(.1, 0, .25);
+  scarf.add(ring, tail, stripe);
+  for (const group of [flower, bow, crown, scarf]) group.visible = false;
+  return { flower, bow, crown, scarf };
+}
+
+/** 只显示穿着的那一件装扮（none 或不认识的 id 就都不显示） */
+export function showAccessory(accessories: Record<string, THREE.Group>, id: string): void {
+  for (const [accessoryId, group] of Object.entries(accessories)) group.visible = accessoryId === id;
+}
+
+// ---------------- 小水杯（推杯子提醒、捣乱时用） ----------------
+
+/** 浅蓝色的小马克杯：被推着往旁边滑，滑到边上就掉下去 */
+export class CupProp {
+  readonly group = new THREE.Group();
+
+  /** basePosition：杯子放在宠物身边的位置；scale：杯子大小（小动物用小一点的杯子） */
+  constructor(builder: ModelBuilder, private readonly basePosition: THREE.Vector3, scale = 1) {
+    const cupMaterial = builder.toon(0x7cc4f5, .2);
+    const cupBody = builder.withOutline(new THREE.Mesh(new THREE.CylinderGeometry(.085, .075, .17, 24), cupMaterial));
+    cupBody.position.y = .085;
+    const cupHandle = builder.withOutline(new THREE.Mesh(new THREE.TorusGeometry(.045, .014, 8, 16, Math.PI), cupMaterial));
+    cupHandle.position.set(.085, .09, 0);
+    cupHandle.rotation.z = -Math.PI / 2;
+    const water = builder.sticker(builder.solid(0x3a8fd8), .075, .075, 0, .171, 0);
+    water.rotation.x = -Math.PI / 2;
+    this.group.add(cupBody, cupHandle, water);
+    this.group.scale.setScalar(scale);
+    this.group.visible = false;
+  }
+
+  /** visible：是否显示；push：被推的进度 0~1（前 60% 往旁边滑，后 40% 掉下去） */
+  update(visible: number, push: number): void {
+    this.group.visible = visible > .5;
+    const slide = Math.min(push, .6) / .6;
+    const fall = Math.max(0, push - .6) / .4;
+    this.group.position.set(this.basePosition.x + slide * .35, this.basePosition.y - fall * fall * 1.6, this.basePosition.z);
+    this.group.rotation.z = -fall * 1.8;
+  }
+}
+
 /** 姿势参数平滑追向目标（眼睛、嘴巴这类要快一点） */
 export function dampPose<Pose extends Record<string, number>>(current: Pose, target: Pose, deltaSeconds: number, nonDampedKeys: Set<string>, fastKeys: Set<string>): void {
   for (const key of Object.keys(target) as (keyof Pose & string)[]) {

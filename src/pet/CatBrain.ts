@@ -8,6 +8,7 @@ import {
   STRIDE_LENGTH, WALK_SPEED, catPixels,
 } from './constants';
 import { catConfig, type RoutinePhase } from './catConfig';
+import type { PetSpecies } from './species';
 import { actionLibrary, type ActionContext, type ActionDefinition, type ActionStep, type ActionTrigger, type CatPlace } from './actionSystem';
 import type { DesktopLayout, LocalWindow } from './DesktopLayout';
 import type { FreeSpaceMap } from './FreeSpaceMap';
@@ -145,6 +146,10 @@ export class CatBrain {
   routinePhase: RoutinePhase = 'working';
   /** 亲密度（越高解锁越多亲昵动作） */
   intimacy = 0;
+  /** 现在是哪种动物（动作库按它挑选通用动作和特有动作） */
+  species: PetSpecies = 'cat';
+  /** 有没有腿（金鱼没有：不舔爪、不挠痒……） */
+  hasLegs = true;
   /** 你是不是正在打字、正在用什么软件（动作条件会用到） */
   isUserTyping = false;
   foregroundCategory = 'other';
@@ -284,6 +289,8 @@ export class CatBrain {
     const head = this.headPosition;
     return {
       trigger,
+      species: this.species,
+      hasLegs: this.hasLegs,
       place: this.place,
       mood: this.moodLevel,
       intimacy: this.intimacy,

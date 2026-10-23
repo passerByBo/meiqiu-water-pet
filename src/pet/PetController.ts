@@ -17,6 +17,7 @@ import { catConfig, lineKindOf, loadCatConfig, type RewardRule } from './catConf
 import { chooseDialogueGroup, type DialogueContext } from './dialogueSelector';
 import { DailyRoutine, type RoutineEvent } from './dailyRoutine';
 import { actionLibrary } from './actionSystem';
+import { adaptTextToSpecies, speciesInfo, type PetSpecies, type SpeciesInfo } from './species';
 import {
   backendApi, type AppSettings, type CursorPayload, type CustomReminderFiredPayload, type DesktopLayoutPayload, type MoodLevel,
   type ReminderFiredPayload, type RoamMode, type Statistics,
@@ -128,9 +129,11 @@ export class PetController {
   }
 
   async start(): Promise<void> {
-    await Promise.all([catVoice.loadManifest(), loadCatConfig(), actionLibrary.load()]);
-    console.info(`煤球的动作库：${actionLibrary.count} 个动作`);
-    this.applySettings(await backendApi.getSettings());
+    await Promise.all([loadCatConfig(), actionLibrary.load()]);
+    console.info(`动作库：${actionLibrary.count} 个动作`);
+    const settings = await backendApi.getSettings();
+    await this.switchSpecies(speciesInfo(settings.petSpecies).id, false);
+    this.applySettings(settings);
     const mood = await backendApi.getCatMood();
     this.brain.intimacy = mood.intimacy;
     this.applyMood(mood.level, false);
@@ -151,6 +154,8 @@ export class PetController {
   // ---------------- 设置与心情 ----------------
   private applySettings(settings: AppSettings): void {
     this.settings = settings;
+    // 设置里换了宠物：马上换模型、换声音、换口吻
+    if (speciesInfo(settings.petSpecies).id !== this.scene.species) void this.switchSpecies(speciesInfo(settings.petSpecies).id, true);
     catVoice.isEnabled = settings.voiceEnabled;
     catVoice.mode = settings.voiceMode;
     catVoice.volume = settings.voiceVolume / 100;
@@ -160,15 +165,46 @@ export class PetController {
     this.brain.mischiefLevel = settings.mischiefLevel;
     this.userCatScale = settings.catSizePercent / 100;
     this.applyCatSize();
-    this.scene.catModel.setAccessory(settings.equippedAccessory);
+    this.scene.petModel.setAccessory(settings.equippedAccessory);
   }
 
-  /** 把台词里对主人的称呼换成设置里填的名字；addressOwner 时有一半概率在前面加上称呼 */
+  /** 现在这只宠物的种类信息 */
+  private get species(): SpeciesInfo {
+    return speciesInfo(this.scene.species);
+  }
+
+  /** 现在这只宠物的名字（设置里没改过就用默认名字） */
+  private get petName(): string {
+    return this.settings?.petNames?.[this.scene.species] || this.species.defaultName;
+  }
+
+  /**
+   * 换一种宠物：换 3D 模型、换叫声和语音、换动作库里的特有动作。
+   * 喝水数据大家共用；心情和亲密度由后端按动物分开记（换了之后会推送这只动物自己的心情）
+   */
+  private async switchSpecies(species: PetSpecies, shouldGreet: boolean): Promise<void> {
+    const model = this.scene.setSpecies(species);
+    this.brain.species = species;
+    this.brain.hasLegs = speciesInfo(species).hasLegs;
+    if (this.settings) model.setAccessory(this.settings.equippedAccessory);
+    await catVoice.loadManifest(species);
+    if (shouldGreet) {
+      this.brain.setBehavior('happy', 2);
+      this.effects.say(`我是${this.petName}！以后由我陪你喝水～`, 3500);
+    }
+  }
+
+  /**
+   * 气泡文字个性化：先换成这种动物的口吻（本喵 → 本汪……），再把对主人的称呼换成设置里填的名字；
+   * addressOwner 时有一半概率在前面加上称呼
+   */
   private personalize(text: string, addressOwner = false): string {
+    if (!text) return text;
+    const adapted = adaptTextToSpecies(text, this.species);
     const ownerName = this.settings?.ownerName?.trim();
-    if (!ownerName || !text) return text;
-    const replaced = text.replace(/两脚兽|铲屎官|主人/g, ownerName);
-    if (addressOwner && replaced === text && Math.random() < .5) return `${ownerName}，${text}`;
+    if (!ownerName) return adapted;
+    const replaced = adapted.replace(/两脚兽|铲屎官|主人/g, ownerName);
+    if (addressOwner && replaced === adapted && Math.random() < .5) return `${ownerName}，${adapted}`;
     return replaced;
   }
 
@@ -608,7 +644,7 @@ export class PetController {
       targetWindowId: this.desktop.foregroundWindow?.id,
       showBubble,
     });
-    this.scene.catModel.setSignText(signText);
+    this.scene.petModel.setSignText(signText);
     // 一直没人理：算"忽略"，升级后下次再提醒
     this.reminderTimeoutTimer = window.setTimeout(() => {
       if (!petUiState.showReminderActions || petUiState.activeCustomReminderId) return;
@@ -632,7 +668,7 @@ export class PetController {
       catVoice.speak({ line, fallbackText: payload.message, shouldSpeakFallback: true, meowKind: 'call', priority: 'high' });
     };
     const signText = (payload.title || '提醒').slice(0, 5);
-    this.scene.catModel.setSignText(signText);
+    this.scene.petModel.setSignText(signText);
     this.brain.startRemind({ escalationLevel: 0, style: 'sign', signText, targetWindowId: this.desktop.foregroundWindow?.id, showBubble });
     // 一直没人理：当作"等一下嘛"，过一会儿再提醒
     this.reminderTimeoutTimer = window.setTimeout(() => {
@@ -864,12 +900,12 @@ export class PetController {
   };
 
   private renderFrame(renderDeltaSeconds: number): void {
-    const catModel = this.scene.catModel;
-    catModel.root.rotation.y = this.brain.yaw;
+    const petModel = this.scene.petModel;
+    petModel.root.rotation.y = this.brain.yaw;
     // 落地时压扁一下再弹回来（像小皮球）
     const squash = Math.sin(this.brain.squashAmount * Math.PI) * .16;
-    catModel.root.scale.set(1 + squash * .7, 1 - squash, 1 + squash * .7);
-    catModel.update(this.brain.buildTargetPose(), this.brain.walkPhase, this.brain.elapsedSeconds, renderDeltaSeconds);
+    petModel.root.scale.set(1 + squash * .7, 1 - squash, 1 + squash * .7);
+    petModel.update(this.brain.buildTargetPose(), this.brain.walkPhase, this.brain.elapsedSeconds, renderDeltaSeconds);
     this.scene.render();
     this.syncWindowPosition();
     this.updateCanvasClip();

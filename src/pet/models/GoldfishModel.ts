@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose } from '../BlackCatModel';
-import { Blinker, createAnimeEye, EYE_PALETTES, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
+import { Blinker, createAccessoryMeshes, createAnimeEye, CupProp, EYE_PALETTES, showAccessory, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
 const COLORS = {
   body: 0x1b1b25,       // 黑色身子
@@ -137,6 +137,8 @@ export class GoldfishModel implements PetModel {
   private swimPhase = 0;
   private readonly shadow: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly sign = new SignProp(.6, .37);
+  private readonly cup: CupProp;
+  private readonly accessories: Record<string, THREE.Group>;
 
   constructor() {
     const builder = new ModelBuilder({ outlineColor: 0x07070b, outlineThickness: .018, rimColor: 0xa9cbff });
@@ -244,6 +246,22 @@ export class GoldfishModel implements PetModel {
 
     this.sign.group.position.set(0, .3, .66);
     this.root.add(this.sign.group);
+    this.cup = new CupProp(builder, new THREE.Vector3(.42, 0, .5));
+    this.root.add(this.cup.group);
+
+    // 装扮：小花、蝴蝶结戴在头顶肉瘤的旁边；皇冠戴在最顶上；
+    // 围巾围在头后面那一圈白色上（鱼的"脖子"），前低后高地斜着，正面看只在下巴底下露出一截
+    this.accessories = createAccessoryMeshes(builder, .37);
+    const { flower, bow, crown, scarf } = this.accessories;
+    flower.position.set(.21, .3, .36);
+    flower.rotation.set(-.3, .55, 0);
+    bow.position.set(-.21, .31, .34);
+    bow.rotation.set(-.3, -.55, .25);
+    crown.position.set(0, .44, .18);
+    crown.rotation.x = -.3;
+    scarf.position.set(0, -.03, -.02);
+    scarf.rotation.x = Math.PI / 2 - .55;   // 竖起来再往后倒：前面低（在下巴底下）、后面高（藏在肉瘤后面）
+    this.fish.add(flower, bow, crown, scarf);
   }
 
   /**
@@ -443,6 +461,7 @@ export class GoldfishModel implements PetModel {
     updateEyes(this.eyes, pose, this.blinker.update(deltaSeconds), .015, elapsedSeconds);
 
     this.sign.update(pose.holdSign, elapsedSeconds);
+    this.cup.update(pose.cupVisible, pose.cupPush);
     // 影子：鱼离地越高影子越淡
     this.shadow.material.opacity = (.45 - (this.swim.position.y - .3) * .3) * (1 - pose.lifted);
   }
@@ -451,7 +470,8 @@ export class GoldfishModel implements PetModel {
     this.sign.setText(text);
   }
 
-  setAccessory(_id: string): void {
-    // 装扮在编码阶段加
+  /** 穿上装扮（none 或 flower / bow / scarf / crown） */
+  setAccessory(id: string): void {
+    showAccessory(this.accessories, id);
   }
 }

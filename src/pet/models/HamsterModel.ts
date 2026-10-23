@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose } from '../BlackCatModel';
-import { Blinker, createAnimeEye, EYE_PALETTES, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
+import { Blinker, createAccessoryMeshes, createAnimeEye, CupProp, EYE_PALETTES, showAccessory, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
 const COLORS = {
   cream: 0xecbf86,      // 奶黄色的毛（参考图里偏金黄的奶油色）
@@ -75,6 +75,8 @@ export class HamsterModel implements PetModel {
   private readonly hindFeet: { mesh: THREE.Mesh; leg: THREE.Mesh; side: number }[] = [];
   private readonly shadow: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly sign = new SignProp(.56, .35);
+  private readonly cup: CupProp;
+  private readonly accessories: Record<string, THREE.Group>;
 
   constructor() {
     const builder = new ModelBuilder({ outlineColor: 0x5a3d2b, outlineThickness: .018, rimColor: 0xfff1dc });
@@ -168,6 +170,21 @@ export class HamsterModel implements PetModel {
     }
 
     this.root.add(this.sign.group);
+    this.cup = new CupProp(builder, new THREE.Vector3(.4, 0, .4), .8);
+    this.root.add(this.cup.group);
+
+    // 装扮：小花、蝴蝶结戴在耳朵旁边；皇冠戴在呆毛后面一点（不压着呆毛）；围巾围在头和身子交接的地方
+    this.accessories = createAccessoryMeshes(builder, .36);
+    const { flower, bow, crown, scarf } = this.accessories;
+    flower.position.set(.2, .26, .22);
+    flower.rotation.set(-.2, .45, 0);
+    bow.position.set(-.19, .29, .17);
+    bow.rotation.set(-.15, -.45, .25);
+    crown.position.set(0, .35, -.09);
+    crown.rotation.x = -.2;
+    scarf.position.set(0, -.27, -.02);
+    scarf.rotation.x = .3;
+    this.head.add(flower, bow, crown, scarf);
   }
 
   update(targetPose: PetPose, walkPhase: number, elapsedSeconds: number, deltaSeconds: number): void {
@@ -270,6 +287,7 @@ export class HamsterModel implements PetModel {
     // ---- 小牌子、阴影 ----
     this.sign.group.position.set(0, .62, .66);
     this.sign.update(pose.holdSign, elapsedSeconds);
+    this.cup.update(pose.cupVisible, pose.cupPush);
     this.shadow.material.opacity = (1 - pose.lifted) * (1 - pose.airborne * .6);
   }
 
@@ -286,7 +304,8 @@ export class HamsterModel implements PetModel {
     this.sign.setText(text);
   }
 
-  setAccessory(_id: string): void {
-    // 装扮在编码阶段加
+  /** 穿上装扮（none 或 flower / bow / scarf / crown） */
+  setAccessory(id: string): void {
+    showAccessory(this.accessories, id);
   }
 }
