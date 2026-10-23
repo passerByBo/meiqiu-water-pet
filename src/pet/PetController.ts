@@ -47,6 +47,11 @@ const MAX_TYPING_WAIT_MS = 3 * 60_000;
 const REFERENCE_SCREEN_HEIGHT = 1040;
 /** 一直用同一个软件多久，提醒你休息一下 */
 const LONG_FOCUS_MS = 60 * 60_000;
+/** 每隔多久检查一次要不要保存宠物位置；挪动超过多少像素才保存（避免频繁写数据库） */
+const POSITION_SAVE_INTERVAL_MS = 15_000;
+const POSITION_SAVE_MIN_DISTANCE = 20;
+/** 上次保存的位置离屏幕底边这么近，就当它是待在底边 */
+const EDGE_RESTORE_TOLERANCE = 6;
 
 interface PetElements {
   canvas: HTMLCanvasElement;
@@ -80,6 +85,8 @@ export class PetController {
   private readonly groundPointInWindow: Point;
 
   private settings: AppSettings | null = null;
+  /** 上次存进数据库的宠物位置 */
+  private lastSavedPosition: Point | null = null;
   private moodLevel: MoodLevel = 'normal';
   /** 猫咪窗口左上角在当前显示器上的逻辑坐标 */
   private windowOrigin: Point = { x: 0, y: 0 };
@@ -138,7 +145,7 @@ export class PetController {
     this.brain.intimacy = mood.intimacy;
     this.applyMood(mood.level, false);
     this.applyDesktopLayout(await backendApi.getDesktopLayout());
-    this.placeCatAtStart();
+    this.placeCatAtStart(await backendApi.getPetPosition().catch(() => null));
 
     this.bindBackendEvents();
     this.bindPointerEvents();
@@ -146,6 +153,7 @@ export class PetController {
     await getCurrentWindow().show();
     requestAnimationFrame(this.loop);
     window.setInterval(() => this.checkSlowConditions(), 500);
+    window.setInterval(() => this.savePositionIfMoved(), POSITION_SAVE_INTERVAL_MS);
     window.setTimeout(() => void this.sayGreeting(), 1500);
     // 启动时也检查一次装扮（比如昨天达标后没开程序）
     window.setTimeout(() => void this.checkRewards(), 6000);
@@ -153,7 +161,11 @@ export class PetController {
 
   // ---------------- 设置与心情 ----------------
   private applySettings(settings: AppSettings): void {
+    const previousRoamMode = this.settings?.defaultRoamMode;
     this.settings = settings;
+    if (previousRoamMode && settings.defaultRoamMode !== previousRoamMode && settings.defaultRoamMode !== this.brain.roamMode) {
+      this.brain.setRoamMode(settings.defaultRoamMode);
+    }
     // 设置里换了宠物：马上换模型、换声音、换口吻
     if (speciesInfo(settings.petSpecies).id !== this.scene.species) void this.switchSpecies(speciesInfo(settings.petSpecies).id, true);
     catVoice.isEnabled = settings.voiceEnabled;
@@ -275,18 +287,43 @@ export class PetController {
     }
   }
 
-  private placeCatAtStart(): void {
+  /**
+   * 启动时把宠物放到哪儿：上次退出前的位置还在现在的屏幕范围内就回到原地（附近的空地，或者屏幕底边），
+   * 否则（第一次启动、换了显示器）放在右下角
+   */
+  private placeCatAtStart(savedPosition: Point | null): void {
     const workArea = this.desktop.workArea;
-    const startCell = this.freeSpaceMap.nearestFreeCell(workArea.right * .85, workArea.bottom * .85);
-    if (startCell >= 0 && this.settings?.defaultRoamMode !== 'edge') {
+    const isSavedPositionUsable = !!savedPosition
+      && savedPosition.x >= workArea.left && savedPosition.x <= workArea.right
+      && savedPosition.y >= workArea.top && savedPosition.y <= workArea.bottom + 1;
+    const preferred = isSavedPositionUsable ? savedPosition : { x: workArea.right * .85, y: workArea.bottom * .85 };
+    const wasOnEdge = isSavedPositionUsable && workArea.bottom - savedPosition.y < EDGE_RESTORE_TOLERANCE;
+    const startCell = this.freeSpaceMap.nearestFreeCell(preferred.x, preferred.y);
+    if (startCell >= 0 && !wasOnEdge && this.settings?.defaultRoamMode !== 'edge') {
       this.brain.position = this.freeSpaceMap.cellCenter(startCell);
     } else {
-      this.brain.position = { x: workArea.right * .85, y: workArea.bottom };
+      this.brain.position = { x: Math.min(Math.max(preferred.x, workArea.left + 60), workArea.right - 60), y: workArea.bottom };
       this.brain.isOnEdge = true;
     }
+    this.lastSavedPosition = { ...this.brain.position };
+    const where = isSavedPositionUsable ? '回到上次的位置' : '默认位置';
+    console.info(`启动：${this.species.label}${this.petName}，${where}（${Math.round(this.brain.position.x)}, ${Math.round(this.brain.position.y)}）`);
     this.brain.roamMode = this.settings?.defaultRoamMode ?? 'free';
     this.brain.setBehavior('sit', 2);
     this.brain.isReady = true;
+  }
+
+  /**
+   * 宠物挪了地方就把位置存下来（下次启动回到原地）。偷看时不存（那时躲在窗口后面）；
+   * 站在窗口上的位置照样存，下次启动时窗口不一定还在，会落到附近的空地上
+   */
+  private savePositionIfMoved(): void {
+    if (!this.brain.isReady || this.brain.peek) return;
+    const position = this.brain.position;
+    const last = this.lastSavedPosition;
+    if (last && Math.hypot(position.x - last.x, position.y - last.y) < POSITION_SAVE_MIN_DISTANCE) return;
+    this.lastSavedPosition = { ...position };
+    void backendApi.savePetPosition(position).catch(() => {});
   }
 
   // ---------------- 后端事件 ----------------
@@ -547,7 +584,7 @@ export class PetController {
   // ---------------- 技能菜单 ----------------
   private buildSkillMenu(): SkillMenuEntry[] {
     const roamSkill = (id: string, icon: string, label: string, mode: RoamMode): CatSkill =>
-      ({ id, icon, label, isChecked: () => this.brain.roamMode === mode, run: () => this.brain.setRoamMode(mode) });
+      ({ id, icon, label, isChecked: () => this.brain.roamMode === mode, run: () => void this.changeRoamMode(mode) });
     return [
       { id: 'drinkWater', icon: '💧', label: '我喝了一杯', run: () => void this.recordDrink('menu') },
       { id: 'undoDrink', icon: '↩', label: '撤销上一杯', run: () => void this.undoDrink() },
@@ -567,6 +604,13 @@ export class PetController {
       { id: 'screenshot', icon: '📷', label: '截屏', comingSoon: true },
       { id: 'aiChat', icon: '💬', label: 'AI 对话', comingSoon: true },
     ];
+  }
+
+  /** 右键菜单换活动方式：马上生效，并保存成默认活动方式（退出再打开还是它） */
+  private async changeRoamMode(mode: RoamMode): Promise<void> {
+    this.brain.setRoamMode(mode);
+    if (!this.settings || this.settings.defaultRoamMode === mode) return;
+    this.applySettings(await backendApi.updateSettings({ ...this.settings, defaultRoamMode: mode }));
   }
 
   private onComingSoonSkill(_skill: CatSkill): void {

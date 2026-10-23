@@ -1,6 +1,7 @@
 // 封装所有和 Rust 后端的通信：命令调用（invoke）和事件监听（listen）
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { Point } from './geometry';
 
 /** 物理像素矩形（虚拟屏幕坐标，副屏可能是负数） */
 export interface PhysicalRect {
@@ -209,6 +210,9 @@ export const backendApi = {
   getDesktopLayout: () => invoke<DesktopLayoutPayload>('get_desktop_layout'),
   movePetWindow: (x: number, y: number) => invoke<void>('move_pet_window', { x, y }),
   setClickThrough: (enabled: boolean) => invoke<void>('set_click_through', { enabled }),
+  /** 上次保存的宠物位置（屏幕逻辑坐标，脚底中心）；没有就是 null */
+  getPetPosition: () => invoke<Point | null>('get_pet_position'),
+  savePetPosition: (position: Point) => invoke<void>('save_pet_position', { x: position.x, y: position.y }),
 
   /** source：从哪儿记的（bubble 气泡 / doubleClick 双击 / menu 菜单 / tray 托盘） */
   recordDrink: (source: string) => invoke<DrinkProgress>('record_drink', { source }),

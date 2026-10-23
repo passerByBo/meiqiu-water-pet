@@ -38,6 +38,8 @@ pub fn run() {
             pet_window::get_desktop_layout,
             pet_window::move_pet_window,
             pet_window::set_click_through,
+            pet_window::get_pet_position,
+            pet_window::save_pet_position,
             reminder::record_drink,
             reminder::undo_last_drink,
             reminder::snooze_reminder,

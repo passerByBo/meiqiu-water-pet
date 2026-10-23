@@ -375,7 +375,10 @@ fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
         fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     }
     let content = serde_json::to_string_pretty(settings).map_err(|error| error.to_string())?;
-    fs::write(path, content).map_err(|error| error.to_string())
+    // 先完整写到临时文件，再一次性替换正式文件：写到一半断电或崩溃时，原来的设置文件不会损坏
+    let temporary_path = path.with_extension("json.tmp");
+    fs::write(&temporary_path, content).map_err(|error| error.to_string())?;
+    fs::rename(&temporary_path, &path).map_err(|error| error.to_string())
 }
 
 /// 让开机自启的实际状态和设置保持一致（设置为准）
