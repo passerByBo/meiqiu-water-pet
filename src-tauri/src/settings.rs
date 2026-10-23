@@ -396,6 +396,7 @@ pub fn apply(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     mood::switch_species(app, &settings.pet_species);
     reminder::apply_settings(app, settings);
     tray::sync_settings(app, settings);
+    sync_window_titles(app, settings);
     Ok(())
 }
 
@@ -421,7 +422,7 @@ pub fn modify(app: &AppHandle, change: impl FnOnce(&mut Settings)) {
 /// 打开一个普通窗口（设置、统计）；已经打开就把它切到前面。
 /// 注意：在 Windows 上，如果在命令处理或菜单事件里直接同步创建窗口，会和 WebView2 互相等待而卡死
 /// （表现为窗口白屏、关不掉），所以放到单独的线程里创建。
-fn open_page_window(app: &AppHandle, label: &'static str, page: &'static str, title: &'static str, width: f64, height: f64) {
+fn open_page_window(app: &AppHandle, label: &'static str, page: &'static str, title: String, width: f64, height: f64) {
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.unminimize();
         let _ = window.show();
@@ -442,12 +443,37 @@ fn open_page_window(app: &AppHandle, label: &'static str, page: &'static str, ti
     });
 }
 
+/// 窗口标题里的名字跟着现在养的宠物走（例如"小柴 · 设置"）
+fn settings_window_title(settings: &Settings) -> String {
+    format!("{} · 设置", settings.current_pet_name())
+}
+
+fn statistics_window_title(settings: &Settings) -> String {
+    format!("{} · 喝水统计", settings.current_pet_name())
+}
+
+fn current_settings(app: &AppHandle) -> Settings {
+    app.state::<SettingsState>().0.lock().unwrap().clone()
+}
+
 pub fn open_window(app: &AppHandle) {
-    open_page_window(app, SETTINGS_WINDOW_LABEL, "settings.html", "煤球 · 设置", 580.0, 720.0);
+    let title = settings_window_title(&current_settings(app));
+    open_page_window(app, SETTINGS_WINDOW_LABEL, "settings.html", title, 580.0, 720.0);
 }
 
 pub fn show_statistics_window(app: &AppHandle) {
-    open_page_window(app, STATISTICS_WINDOW_LABEL, "statistics.html", "煤球 · 喝水统计", 760.0, 720.0);
+    let title = statistics_window_title(&current_settings(app));
+    open_page_window(app, STATISTICS_WINDOW_LABEL, "statistics.html", title, 760.0, 720.0);
+}
+
+/// 换了宠物或改了名字：已经打开的设置 / 统计窗口的标题也跟着换
+fn sync_window_titles(app: &AppHandle, settings: &Settings) {
+    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        let _ = window.set_title(&settings_window_title(settings));
+    }
+    if let Some(window) = app.get_webview_window(STATISTICS_WINDOW_LABEL) {
+        let _ = window.set_title(&statistics_window_title(settings));
+    }
 }
 
 // ---------------- 给前端调用的命令 ----------------

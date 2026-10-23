@@ -1,7 +1,7 @@
 <template>
   <div v-if="draft" class="settings-page">
     <header>
-      <h1>🐾 煤球 · 设置</h1>
+      <h1>{{ currentSpecies.icon }} {{ currentPetName }} · 设置</h1>
       <span class="save-status" :class="saveStatus">{{ saveStatusText }}</span>
     </header>
 
@@ -31,7 +31,7 @@
     <section>
       <h2>🐱 关于你</h2>
       <div class="row">
-        <label>煤球怎么称呼你</label>
+        <label>{{ currentPetName }}怎么称呼你</label>
         <div class="control">
           <input v-model="draft.ownerName" class="name-input" maxlength="8" placeholder="例如：小明（不填就叫你）">
         </div>
@@ -69,7 +69,7 @@
       <div class="row">
         <label><input v-model="draft.workHours.enabled" type="checkbox"> 只在上班时间提醒喝水</label>
       </div>
-      <p class="hint">煤球会跟着你的作息走：上班时伸懒腰，午休陪你睡午觉（不提醒），快下班时很兴奋，下班后还在忙会催你回家。</p>
+      <p class="hint">{{ currentPetName }}会跟着你的作息走：上班时伸懒腰，午休陪你睡午觉（不提醒），快下班时很兴奋，下班后还在忙会催你回家。</p>
     </section>
 
     <!-- ⏰ 喝水提醒 -->
@@ -116,7 +116,7 @@
     <!-- 📅 定时提醒 -->
     <section>
       <h2>📅 定时提醒</h2>
-      <p class="hint">到点煤球会跑过来举牌提醒，点"等一下嘛"会过一会儿再提醒，直到点"做完啦"。不受上班时间和勿扰时段限制。</p>
+      <p class="hint">到点{{ currentPetName }}会跑过来举牌提醒，点"等一下嘛"会过一会儿再提醒，直到点"做完啦"。不受上班时间和勿扰时段限制。</p>
       <div v-for="(reminder, index) in draft.customReminders" :key="reminder.id" class="custom-reminder">
         <div class="list-item">
           <input v-model="reminder.enabled" type="checkbox" title="启用">
@@ -143,7 +143,7 @@
             <input v-model.number="reminder.repeatIntervalMinutes" type="number" min="5" max="480" step="5"> <span>分钟</span>
           </template>
         </div>
-        <input v-model="reminder.message" class="message-input" maxlength="60" placeholder="煤球要说的话" @input="reminder.voiceLineId = null">
+        <input v-model="reminder.message" class="message-input" maxlength="60" :placeholder="`${currentPetName}要说的话`" @input="reminder.voiceLineId = null">
         <div class="list-item">
           <div class="weekdays">
             <button v-for="day in WEEKDAYS" :key="day.value" class="weekday" :class="{ selected: reminder.weekdays.includes(day.value) }"
@@ -334,6 +334,8 @@ const saveStatusText = computed(() => ({
 
 // ---- 宠物 ----
 const currentSpecies = computed(() => speciesInfo(draft.value?.petSpecies));
+/** 现在这只宠物的名字（页面上的"煤球"都换成它） */
+const currentPetName = computed(() => (draft.value?.petNames[draft.value.petSpecies] || '').trim() || currentSpecies.value.defaultName);
 
 /** 改当前宠物的名字；清空就恢复默认名字 */
 function renamePet(name: string): void {

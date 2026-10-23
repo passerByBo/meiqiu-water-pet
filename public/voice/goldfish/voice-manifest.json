@@ -1,0 +1,1236 @@
+{
+  "speaker": "zh_female_mengyatou_uranus_bigtts",
+  "generatedAt": "2026-10-23T14:46:50.918Z",
+  "lines": [
+    {
+      "id": "remind-01",
+      "group": "remind",
+      "emotion": "coquettish",
+      "text": "咕噜～两脚兽，该喝水啦！",
+      "file": "remind-01.mp3"
+    },
+    {
+      "id": "remind-02",
+      "group": "remind",
+      "emotion": "coquettish",
+      "text": "本鱼天天泡在水里，你怎么还不喝水呀？",
+      "file": "remind-02.mp3"
+    },
+    {
+      "id": "remind-03",
+      "group": "remind",
+      "emotion": "proud",
+      "text": "检测到主人含水量下降，请立即补水！",
+      "file": "remind-03.mp3"
+    },
+    {
+      "id": "remind-04",
+      "group": "remind",
+      "emotion": "coquettish",
+      "text": "都说金鱼只有七秒记忆，可本鱼一直记得提醒你喝水！",
+      "file": "remind-04.mp3"
+    },
+    {
+      "id": "remind-05",
+      "group": "remind",
+      "emotion": "coquettish",
+      "text": "你已经好久没理本鱼了，喝口水再继续嘛～",
+      "file": "remind-05.mp3"
+    },
+    {
+      "id": "remind-06",
+      "group": "remind",
+      "emotion": "coquettish",
+      "text": "咕噜咕噜～陪本鱼喝一口水好不好？",
+      "file": "remind-06.mp3"
+    },
+    {
+      "id": "remind-thirsty-01",
+      "group": "remindThirsty",
+      "emotion": "aggrieved",
+      "text": "咕噜…你是不是忘了本鱼说的话呀？",
+      "file": "remind-thirsty-01.mp3"
+    },
+    {
+      "id": "remind-thirsty-02",
+      "group": "remindThirsty",
+      "emotion": "aggrieved",
+      "text": "渴…渴死啦…快去喝水嘛～",
+      "file": "remind-thirsty-02.mp3"
+    },
+    {
+      "id": "remind-angry-01",
+      "group": "remindAngry",
+      "emotion": "angry",
+      "text": "咕噜！再不喝水，本鱼就对着你的屏幕吐泡泡！",
+      "file": "remind-angry-01.mp3"
+    },
+    {
+      "id": "remind-angry-02",
+      "group": "remindAngry",
+      "emotion": "angry",
+      "text": "哼！本鱼生气了，快去喝水！",
+      "file": "remind-angry-02.mp3"
+    },
+    {
+      "id": "drink-count-01",
+      "group": "drinkCount",
+      "count": 1,
+      "emotion": "happy",
+      "text": "咕噜咕噜～今天第一杯啦！",
+      "file": "drink-count-01.mp3"
+    },
+    {
+      "id": "drink-count-02",
+      "group": "drinkCount",
+      "count": 2,
+      "emotion": "happy",
+      "text": "咕噜咕噜～今天第二杯啦！",
+      "file": "drink-count-02.mp3"
+    },
+    {
+      "id": "drink-count-03",
+      "group": "drinkCount",
+      "count": 3,
+      "emotion": "happy",
+      "text": "咕噜咕噜～今天第三杯啦！",
+      "file": "drink-count-03.mp3"
+    },
+    {
+      "id": "drink-count-04",
+      "group": "drinkCount",
+      "count": 4,
+      "emotion": "happy",
+      "text": "咕噜咕噜～今天第四杯啦，已经一半了！",
+      "file": "drink-count-04.mp3"
+    },
+    {
+      "id": "drink-count-05",
+      "group": "drinkCount",
+      "count": 5,
+      "emotion": "happy",
+      "text": "咕噜咕噜～今天第五杯啦！",
+      "file": "drink-count-05.mp3"
+    },
+    {
+      "id": "drink-count-06",
+      "group": "drinkCount",
+      "count": 6,
+      "emotion": "happy",
+      "text": "咕噜咕噜～今天第六杯啦！",
+      "file": "drink-count-06.mp3"
+    },
+    {
+      "id": "drink-count-07",
+      "group": "drinkCount",
+      "count": 7,
+      "emotion": "happy",
+      "text": "第七杯啦，还差一点点就达标咯！",
+      "file": "drink-count-07.mp3"
+    },
+    {
+      "id": "drink-count-08",
+      "group": "drinkCount",
+      "count": 8,
+      "emotion": "happy",
+      "text": "今天第八杯啦！",
+      "file": "drink-count-08.mp3"
+    },
+    {
+      "id": "drink-count-09",
+      "group": "drinkCount",
+      "count": 9,
+      "emotion": "happy",
+      "text": "第九杯！超额完成啦！",
+      "file": "drink-count-09.mp3"
+    },
+    {
+      "id": "drink-count-10",
+      "group": "drinkCount",
+      "count": 10,
+      "emotion": "happy",
+      "text": "第十杯！你是喝水小能手！",
+      "file": "drink-count-10.mp3"
+    },
+    {
+      "id": "drink-count-11",
+      "group": "drinkCount",
+      "count": 11,
+      "emotion": "happy",
+      "text": "第十一杯，本鱼都佩服你了！",
+      "file": "drink-count-11.mp3"
+    },
+    {
+      "id": "drink-count-12",
+      "group": "drinkCount",
+      "count": 12,
+      "emotion": "happy",
+      "text": "第十二杯！今天水分满满！",
+      "file": "drink-count-12.mp3"
+    },
+    {
+      "id": "drink-generic",
+      "group": "drinkGeneric",
+      "emotion": "happy",
+      "text": "咕噜咕噜～又喝了一杯，真乖！",
+      "file": "drink-generic.mp3"
+    },
+    {
+      "id": "goal-reached",
+      "group": "goalReached",
+      "emotion": "proud",
+      "text": "今日喝水达标！你是全世界最棒的主人！",
+      "file": "goal-reached.mp3"
+    },
+    {
+      "id": "snooze-01",
+      "group": "snooze",
+      "emotion": "aggrieved",
+      "text": "哼！十分钟后本鱼还会回来的！",
+      "file": "snooze-01.mp3"
+    },
+    {
+      "id": "snooze-02",
+      "group": "snooze",
+      "emotion": "aggrieved",
+      "text": "好吧好吧…那你一会儿一定要喝哦。",
+      "file": "snooze-02.mp3"
+    },
+    {
+      "id": "wake-up-01",
+      "group": "wakeUp",
+      "emotion": "sleepy",
+      "text": "咕噜…谁叫醒本鱼的…",
+      "file": "wake-up-01.mp3"
+    },
+    {
+      "id": "welcome-back-01",
+      "group": "welcomeBack",
+      "emotion": "happy",
+      "text": "你回来啦！本鱼等你好久了！",
+      "file": "welcome-back-01.mp3"
+    },
+    {
+      "id": "greeting-morning",
+      "group": "greeting",
+      "emotion": "happy",
+      "text": "早上好呀，今天也要记得多喝水哦！",
+      "file": "greeting-morning.mp3"
+    },
+    {
+      "id": "greeting-start",
+      "group": "greeting",
+      "emotion": "coquettish",
+      "text": "本鱼来上班啦，今天由我监督你喝水！",
+      "file": "greeting-start.mp3"
+    },
+    {
+      "id": "peek-caught-01",
+      "group": "peekCaught",
+      "emotion": "surprised",
+      "text": "被、被发现了…咕噜？",
+      "file": "peek-caught-01.mp3"
+    },
+    {
+      "id": "peek-caught-02",
+      "group": "peekCaught",
+      "emotion": "sneaky",
+      "text": "嘘——本鱼在执行秘密任务。",
+      "file": "peek-caught-02.mp3"
+    },
+    {
+      "id": "peek-caught-03",
+      "group": "peekCaught",
+      "emotion": "surprised",
+      "text": "你什么都没看到！",
+      "file": "peek-caught-03.mp3"
+    },
+    {
+      "id": "peek-petted-01",
+      "group": "peekPetted",
+      "emotion": "shy",
+      "text": "嘿嘿，被摸头了～",
+      "file": "peek-petted-01.mp3"
+    },
+    {
+      "id": "peek-start-01",
+      "group": "peekStart",
+      "emotion": "sneaky",
+      "text": "嘘……本鱼去执行秘密任务。",
+      "file": "peek-start-01.mp3"
+    },
+    {
+      "id": "peek-cover-gone",
+      "group": "peekCoverGone",
+      "emotion": "surprised",
+      "text": "哇！我的掩护没了！",
+      "file": "peek-cover-gone.mp3"
+    },
+    {
+      "id": "peek-give-up",
+      "group": "peekGiveUp",
+      "emotion": "aggrieved",
+      "text": "不玩了不玩了～",
+      "file": "peek-give-up.mp3"
+    },
+    {
+      "id": "scared-01",
+      "group": "scared",
+      "emotion": "surprised",
+      "text": "咕噜嗷！吓死本鱼了！",
+      "file": "scared-01.mp3"
+    },
+    {
+      "id": "squeezed-01",
+      "group": "squeezed",
+      "emotion": "surprised",
+      "text": "咕噜！差点被压到！",
+      "file": "squeezed-01.mp3"
+    },
+    {
+      "id": "lifted-01",
+      "group": "lifted",
+      "emotion": "aggrieved",
+      "text": "放本鱼下来！",
+      "file": "lifted-01.mp3"
+    },
+    {
+      "id": "drop-anchored",
+      "group": "dropAnchored",
+      "emotion": "coquettish",
+      "text": "好吧，本鱼就待在这儿陪你～",
+      "file": "drop-anchored.mp3"
+    },
+    {
+      "id": "drop-edge",
+      "group": "dropEdge",
+      "emotion": "happy",
+      "text": "本鱼就在边上溜达～",
+      "file": "drop-edge.mp3"
+    },
+    {
+      "id": "mode-free",
+      "group": "modeFree",
+      "emotion": "happy",
+      "text": "自由散步咯～",
+      "file": "mode-free.mp3"
+    },
+    {
+      "id": "mode-anchored",
+      "group": "modeAnchored",
+      "emotion": "coquettish",
+      "text": "好，本鱼就待在这儿陪你。",
+      "file": "mode-anchored.mp3"
+    },
+    {
+      "id": "mode-edge",
+      "group": "modeEdge",
+      "emotion": "happy",
+      "text": "去边上溜达，不挡你～",
+      "file": "mode-edge.mp3"
+    },
+    {
+      "id": "coming-soon",
+      "group": "comingSoon",
+      "emotion": "shy",
+      "text": "这个本领本鱼还在学，敬请期待～",
+      "file": "coming-soon.mp3"
+    },
+    {
+      "id": "custom-record-orders",
+      "group": "custom",
+      "emotion": "notice",
+      "text": "五点啦，该录单子啦！",
+      "file": "custom-record-orders.mp3"
+    },
+    {
+      "id": "custom-clock-out",
+      "group": "custom",
+      "emotion": "notice",
+      "text": "下班时间到啦，记得打卡哦！",
+      "file": "custom-clock-out.mp3"
+    },
+    {
+      "id": "custom-done",
+      "group": "customDone",
+      "emotion": "happy",
+      "text": "好耶，搞定啦！",
+      "file": "custom-done.mp3"
+    },
+    {
+      "id": "custom-snooze",
+      "group": "customSnooze",
+      "emotion": "coquettish",
+      "text": "那本鱼过一会儿再来提醒你～",
+      "file": "custom-snooze.mp3"
+    },
+    {
+      "id": "react-chat-01",
+      "group": "react-chat",
+      "emotion": "coquettish",
+      "text": "又在和谁聊天呀～",
+      "file": "react-chat-01.mp3"
+    },
+    {
+      "id": "react-chat-02",
+      "group": "react-chat",
+      "emotion": "coquettish",
+      "text": "聊天也别忘了喝口水哦",
+      "file": "react-chat-02.mp3"
+    },
+    {
+      "id": "react-video-01",
+      "group": "react-video",
+      "emotion": "happy",
+      "text": "这个好看吗？本鱼陪你一起看！",
+      "file": "react-video-01.mp3"
+    },
+    {
+      "id": "react-shopping-01",
+      "group": "react-shopping",
+      "emotion": "coquettish",
+      "text": "又在买买买？给本鱼买小鱼干了吗？",
+      "file": "react-shopping-01.mp3"
+    },
+    {
+      "id": "react-browser-01",
+      "group": "react-browser",
+      "emotion": "happy",
+      "text": "在看什么好东西？本鱼也要看！",
+      "file": "react-browser-01.mp3"
+    },
+    {
+      "id": "react-code-01",
+      "group": "react-code",
+      "emotion": "coquettish",
+      "text": "写代码辛苦啦，本鱼在旁边陪你",
+      "file": "react-code-01.mp3"
+    },
+    {
+      "id": "react-code-02",
+      "group": "react-code",
+      "emotion": "shy",
+      "text": "这么多英文字母，本鱼一个都看不懂",
+      "file": "react-code-02.mp3"
+    },
+    {
+      "id": "react-sheet-01",
+      "group": "react-sheet",
+      "emotion": "aggrieved",
+      "text": "格子好多，本鱼数不过来～",
+      "file": "react-sheet-01.mp3"
+    },
+    {
+      "id": "react-doc-01",
+      "group": "react-doc",
+      "emotion": "happy",
+      "text": "写得好认真呀，加油！",
+      "file": "react-doc-01.mp3"
+    },
+    {
+      "id": "react-slides-01",
+      "group": "react-slides",
+      "emotion": "happy",
+      "text": "这页做得好看！",
+      "file": "react-slides-01.mp3"
+    },
+    {
+      "id": "react-music-01",
+      "group": "react-music",
+      "emotion": "happy",
+      "text": "这首歌好听～本鱼想跟着摇",
+      "file": "react-music-01.mp3"
+    },
+    {
+      "id": "react-game-01",
+      "group": "react-game",
+      "emotion": "coquettish",
+      "text": "带本鱼一起玩嘛！",
+      "file": "react-game-01.mp3"
+    },
+    {
+      "id": "react-files-01",
+      "group": "react-files",
+      "emotion": "happy",
+      "text": "在找东西吗？本鱼帮你一起找",
+      "file": "react-files-01.mp3"
+    },
+    {
+      "id": "react-design-01",
+      "group": "react-design",
+      "emotion": "shy",
+      "text": "画得真好看，本鱼也想被画进去",
+      "file": "react-design-01.mp3"
+    },
+    {
+      "id": "react-other-01",
+      "group": "react-other",
+      "emotion": "coquettish",
+      "text": "你在忙什么呀？",
+      "file": "react-other-01.mp3"
+    },
+    {
+      "id": "remind-first-cup",
+      "group": "remind-first-cup",
+      "emotion": "coquettish",
+      "text": "上班这么久了，第一杯水还没喝呢！",
+      "file": "remind-first-cup.mp3"
+    },
+    {
+      "id": "goal-check-1",
+      "group": "goal-check-1",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差一杯哦！",
+      "file": "goal-check-1.mp3"
+    },
+    {
+      "id": "goal-check-2",
+      "group": "goal-check-2",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差两杯哦！",
+      "file": "goal-check-2.mp3"
+    },
+    {
+      "id": "goal-check-3",
+      "group": "goal-check-3",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差三杯哦！",
+      "file": "goal-check-3.mp3"
+    },
+    {
+      "id": "goal-check-4",
+      "group": "goal-check-4",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差四杯哦！",
+      "file": "goal-check-4.mp3"
+    },
+    {
+      "id": "goal-check-5",
+      "group": "goal-check-5",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差五杯哦！",
+      "file": "goal-check-5.mp3"
+    },
+    {
+      "id": "goal-check-6",
+      "group": "goal-check-6",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差六杯哦！",
+      "file": "goal-check-6.mp3"
+    },
+    {
+      "id": "goal-check-7",
+      "group": "goal-check-7",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差七杯哦！",
+      "file": "goal-check-7.mp3"
+    },
+    {
+      "id": "goal-check-8",
+      "group": "goal-check-8",
+      "emotion": "coquettish",
+      "text": "快下班啦，今天还差八杯哦！",
+      "file": "goal-check-8.mp3"
+    },
+    {
+      "id": "remind-behind",
+      "group": "remind-behind",
+      "emotion": "aggrieved",
+      "text": "今天喝得有点少哦，快补一杯！",
+      "file": "remind-behind.mp3"
+    },
+    {
+      "id": "remind-knock",
+      "group": "remind-knock",
+      "emotion": "coquettish",
+      "text": "咚咚咚，有人在吗？该喝水啦！",
+      "file": "remind-knock.mp3"
+    },
+    {
+      "id": "remind-sit-window",
+      "group": "remind-sit-window",
+      "emotion": "angry",
+      "text": "本鱼就坐在这儿，等你喝完水再走！",
+      "file": "remind-sit-window.mp3"
+    },
+    {
+      "id": "remind-push-cup",
+      "group": "remind-push-cup",
+      "emotion": "angry",
+      "text": "再不喝，杯子就要掉下去咯！",
+      "file": "remind-push-cup.mp3"
+    },
+    {
+      "id": "mood-angry",
+      "group": "mood-angry",
+      "emotion": "angry",
+      "text": "哼！本鱼生气了，今天都不好好喝水！",
+      "file": "mood-angry.mp3"
+    },
+    {
+      "id": "mood-grumpy",
+      "group": "mood-grumpy",
+      "emotion": "aggrieved",
+      "text": "咕噜…本鱼有点不开心",
+      "file": "mood-grumpy.mp3"
+    },
+    {
+      "id": "mood-happy",
+      "group": "mood-happy",
+      "emotion": "happy",
+      "text": "本鱼今天心情超好～",
+      "file": "mood-happy.mp3"
+    },
+    {
+      "id": "mood-dodge",
+      "group": "mood-dodge",
+      "emotion": "angry",
+      "text": "哼！现在不想理你",
+      "file": "mood-dodge.mp3"
+    },
+    {
+      "id": "mischief-zoomies",
+      "group": "mischief-zoomies",
+      "emotion": "happy",
+      "text": "咕噜咕噜～～本鱼要撒欢啦！",
+      "file": "mischief-zoomies.mp3"
+    },
+    {
+      "id": "mischief-pounce",
+      "group": "mischief-pounce",
+      "emotion": "sneaky",
+      "text": "别动！本鱼要抓住你！",
+      "file": "mischief-pounce.mp3"
+    },
+    {
+      "id": "mischief-caught-cursor",
+      "group": "mischief-caught-cursor",
+      "emotion": "proud",
+      "text": "抓到啦！",
+      "file": "mischief-caught-cursor.mp3"
+    },
+    {
+      "id": "mischief-occupyWindow",
+      "group": "mischief-occupyWindow",
+      "emotion": "proud",
+      "text": "这里归本鱼了～",
+      "file": "mischief-occupyWindow.mp3"
+    },
+    {
+      "id": "mischief-pushCup",
+      "group": "mischief-pushCup",
+      "emotion": "sneaky",
+      "text": "嘿嘿，这个杯子看起来很好推…",
+      "file": "mischief-pushCup.mp3"
+    },
+    {
+      "id": "mischief-cup-down",
+      "group": "mischief-cup-down",
+      "emotion": "happy",
+      "text": "嘿嘿，掉下去啦～",
+      "file": "mischief-cup-down.mp3"
+    },
+    {
+      "id": "mischief-follow",
+      "group": "mischief-follow",
+      "emotion": "happy",
+      "text": "本鱼跟着你走～",
+      "file": "mischief-follow.mp3"
+    },
+    {
+      "id": "focus-long",
+      "group": "focus-long",
+      "emotion": "coquettish",
+      "text": "你已经盯着屏幕一个小时啦，站起来走走吧",
+      "file": "focus-long.mp3"
+    },
+    {
+      "id": "greet-morning-01",
+      "group": "greet-morning",
+      "emotion": "happy",
+      "text": "早上好呀！今天也由本鱼监督你喝水～",
+      "file": "greet-morning-01.mp3"
+    },
+    {
+      "id": "greet-morning-02",
+      "group": "greet-morning",
+      "emotion": "sleepy",
+      "text": "咕噜…早安，本鱼还有点困，你先喝杯水吧",
+      "file": "greet-morning-02.mp3"
+    },
+    {
+      "id": "greet-morning-03",
+      "group": "greet-morning",
+      "emotion": "happy",
+      "text": "新的一天开始啦，先来一杯水唤醒身体！",
+      "file": "greet-morning-03.mp3"
+    },
+    {
+      "id": "greet-noon-01",
+      "group": "greet-noon",
+      "emotion": "coquettish",
+      "text": "中午好～吃饭了吗？记得喝点水哦",
+      "file": "greet-noon-01.mp3"
+    },
+    {
+      "id": "greet-noon-02",
+      "group": "greet-noon",
+      "emotion": "happy",
+      "text": "本鱼来陪你过中午啦！",
+      "file": "greet-noon-02.mp3"
+    },
+    {
+      "id": "greet-afternoon-01",
+      "group": "greet-afternoon",
+      "emotion": "coquettish",
+      "text": "下午好～本鱼来陪你上班啦",
+      "file": "greet-afternoon-01.mp3"
+    },
+    {
+      "id": "greet-afternoon-02",
+      "group": "greet-afternoon",
+      "emotion": "happy",
+      "text": "下午也要元气满满，记得多喝水！",
+      "file": "greet-afternoon-02.mp3"
+    },
+    {
+      "id": "greet-evening-01",
+      "group": "greet-evening",
+      "emotion": "coquettish",
+      "text": "这么晚还在忙呀？本鱼陪着你",
+      "file": "greet-evening-01.mp3"
+    },
+    {
+      "id": "greet-evening-02",
+      "group": "greet-evening",
+      "emotion": "aggrieved",
+      "text": "都晚上啦，忙完早点休息哦",
+      "file": "greet-evening-02.mp3"
+    },
+    {
+      "id": "greet-late-01",
+      "group": "greet-late",
+      "emotion": "sleepy",
+      "text": "这么晚了还不睡…本鱼都困了",
+      "file": "greet-late-01.mp3"
+    },
+    {
+      "id": "greet-late-02",
+      "group": "greet-late",
+      "emotion": "aggrieved",
+      "text": "熬夜对身体不好，喝口水早点睡吧",
+      "file": "greet-late-02.mp3"
+    },
+    {
+      "id": "greet-monday-01",
+      "group": "greet-monday",
+      "emotion": "coquettish",
+      "text": "又是周一啦，本鱼陪你一起打起精神！",
+      "file": "greet-monday-01.mp3"
+    },
+    {
+      "id": "greet-friday-01",
+      "group": "greet-friday",
+      "emotion": "happy",
+      "text": "周五啦！坚持到下班就放假咯～",
+      "file": "greet-friday-01.mp3"
+    },
+    {
+      "id": "greet-yesterday-good-01",
+      "group": "greet-yesterday-good",
+      "emotion": "proud",
+      "text": "昨天喝水达标了，本鱼很满意！今天继续保持～",
+      "file": "greet-yesterday-good-01.mp3"
+    },
+    {
+      "id": "greet-yesterday-good-02",
+      "group": "greet-yesterday-good",
+      "emotion": "happy",
+      "text": "昨天表现超棒！今天也要像昨天一样哦",
+      "file": "greet-yesterday-good-02.mp3"
+    },
+    {
+      "id": "greet-yesterday-bad-01",
+      "group": "greet-yesterday-bad",
+      "emotion": "aggrieved",
+      "text": "昨天喝得有点少…今天本鱼要盯紧你了",
+      "file": "greet-yesterday-bad-01.mp3"
+    },
+    {
+      "id": "greet-yesterday-bad-02",
+      "group": "greet-yesterday-bad",
+      "emotion": "coquettish",
+      "text": "昨天没达标哦，今天我们一起加油好不好？",
+      "file": "greet-yesterday-bad-02.mp3"
+    },
+    {
+      "id": "greet-streak-01",
+      "group": "greet-streak",
+      "emotion": "proud",
+      "text": "已经连续达标好几天啦，今天也别断哦！",
+      "file": "greet-streak-01.mp3"
+    },
+    {
+      "id": "greet-back-01",
+      "group": "greet-back",
+      "emotion": "happy",
+      "text": "本鱼回来啦～刚才的进度还记着呢",
+      "file": "greet-back-01.mp3"
+    },
+    {
+      "id": "remind-time-morning-01",
+      "group": "remind-time-morning",
+      "emotion": "happy",
+      "text": "一日之计在于晨，先来一杯水！",
+      "file": "remind-time-morning-01.mp3"
+    },
+    {
+      "id": "remind-time-morning-02",
+      "group": "remind-time-morning",
+      "emotion": "coquettish",
+      "text": "上午的第一口水最重要啦，快喝～",
+      "file": "remind-time-morning-02.mp3"
+    },
+    {
+      "id": "remind-time-afterlunch-01",
+      "group": "remind-time-afterlunch",
+      "emotion": "coquettish",
+      "text": "吃完午饭喝点水，帮助消化哦",
+      "file": "remind-time-afterlunch-01.mp3"
+    },
+    {
+      "id": "remind-time-sleepy-01",
+      "group": "remind-time-sleepy",
+      "emotion": "sleepy",
+      "text": "下午容易犯困，喝口水提提神吧",
+      "file": "remind-time-sleepy-01.mp3"
+    },
+    {
+      "id": "remind-time-sleepy-02",
+      "group": "remind-time-sleepy",
+      "emotion": "coquettish",
+      "text": "眼皮在打架了吧？喝口水清醒一下！",
+      "file": "remind-time-sleepy-02.mp3"
+    },
+    {
+      "id": "remind-time-evening-01",
+      "group": "remind-time-evening",
+      "emotion": "coquettish",
+      "text": "快下班啦，喝完这杯再走嘛",
+      "file": "remind-time-evening-01.mp3"
+    },
+    {
+      "id": "remind-ahead-01",
+      "group": "remind-ahead",
+      "emotion": "proud",
+      "text": "今天表现超棒！再来一口保持节奏～",
+      "file": "remind-ahead-01.mp3"
+    },
+    {
+      "id": "remind-ahead-02",
+      "group": "remind-ahead",
+      "emotion": "happy",
+      "text": "喝水小能手，本鱼来提醒你继续保持！",
+      "file": "remind-ahead-02.mp3"
+    },
+    {
+      "id": "remind-ahead-03",
+      "group": "remind-ahead",
+      "emotion": "coquettish",
+      "text": "进度领先啦，喝一小口就好～",
+      "file": "remind-ahead-03.mp3"
+    },
+    {
+      "id": "remind-ontrack-01",
+      "group": "remind-ontrack",
+      "emotion": "coquettish",
+      "text": "时间刚刚好，该喝水啦～",
+      "file": "remind-ontrack-01.mp3"
+    },
+    {
+      "id": "remind-ontrack-02",
+      "group": "remind-ontrack",
+      "emotion": "happy",
+      "text": "按计划进行中！这一杯也别落下哦",
+      "file": "remind-ontrack-02.mp3"
+    },
+    {
+      "id": "remind-behind-02",
+      "group": "remind-behind",
+      "emotion": "aggrieved",
+      "text": "进度落后啦，本鱼有点担心你…",
+      "file": "remind-behind-02.mp3"
+    },
+    {
+      "id": "remind-behind-03",
+      "group": "remind-behind",
+      "emotion": "coquettish",
+      "text": "今天喝得比平时少，快补一杯嘛～",
+      "file": "remind-behind-03.mp3"
+    },
+    {
+      "id": "remind-far-behind-01",
+      "group": "remind-far-behind",
+      "emotion": "aggrieved",
+      "text": "已经落后好几杯了，本鱼要急哭了…",
+      "file": "remind-far-behind-01.mp3"
+    },
+    {
+      "id": "remind-far-behind-02",
+      "group": "remind-far-behind",
+      "emotion": "angry",
+      "text": "你的身体在喊渴啦！快去倒杯水！",
+      "file": "remind-far-behind-02.mp3"
+    },
+    {
+      "id": "remind-last-cup-01",
+      "group": "remind-last-cup",
+      "emotion": "happy",
+      "text": "就差最后一杯啦！喝完今天就达标！",
+      "file": "remind-last-cup-01.mp3"
+    },
+    {
+      "id": "remind-last-cup-02",
+      "group": "remind-last-cup",
+      "emotion": "proud",
+      "text": "冲呀！最后一杯，喝完本鱼给你打滚！",
+      "file": "remind-last-cup-02.mp3"
+    },
+    {
+      "id": "remind-after-goal-01",
+      "group": "remind-after-goal",
+      "emotion": "shy",
+      "text": "今天已经达标啦，再喝一点也不错哦",
+      "file": "remind-after-goal-01.mp3"
+    },
+    {
+      "id": "remind-after-goal-02",
+      "group": "remind-after-goal",
+      "emotion": "coquettish",
+      "text": "达标了也别忘了喝水，本鱼就随便提醒一下～",
+      "file": "remind-after-goal-02.mp3"
+    },
+    {
+      "id": "remind-code-01",
+      "group": "remind-code",
+      "emotion": "coquettish",
+      "text": "代码写累了吧，喝口水再继续！",
+      "file": "remind-code-01.mp3"
+    },
+    {
+      "id": "remind-code-02",
+      "group": "remind-code",
+      "emotion": "happy",
+      "text": "先别管 bug 啦，喝口水说不定就想通了！",
+      "file": "remind-code-02.mp3"
+    },
+    {
+      "id": "remind-chat-01",
+      "group": "remind-chat",
+      "emotion": "coquettish",
+      "text": "聊完这句就去喝口水嘛～",
+      "file": "remind-chat-01.mp3"
+    },
+    {
+      "id": "remind-sheet-01",
+      "group": "remind-sheet",
+      "emotion": "aggrieved",
+      "text": "表格做累了吧？喝口水歇一歇",
+      "file": "remind-sheet-01.mp3"
+    },
+    {
+      "id": "remind-doc-01",
+      "group": "remind-doc",
+      "emotion": "coquettish",
+      "text": "写了这么久，喝口水润润嗓子吧",
+      "file": "remind-doc-01.mp3"
+    },
+    {
+      "id": "remind-browser-01",
+      "group": "remind-browser",
+      "emotion": "coquettish",
+      "text": "别刷啦，先喝口水～",
+      "file": "remind-browser-01.mp3"
+    },
+    {
+      "id": "remind-shopping-01",
+      "group": "remind-shopping",
+      "emotion": "sneaky",
+      "text": "买买买之前，先喝口水冷静一下…",
+      "file": "remind-shopping-01.mp3"
+    },
+    {
+      "id": "remind-mood-happy-01",
+      "group": "remind-mood-happy",
+      "emotion": "happy",
+      "text": "本鱼今天心情好，陪本鱼喝一口嘛～",
+      "file": "remind-mood-happy-01.mp3"
+    },
+    {
+      "id": "remind-mood-grumpy-01",
+      "group": "remind-mood-grumpy",
+      "emotion": "aggrieved",
+      "text": "哼…虽然本鱼不开心，还是要提醒你喝水",
+      "file": "remind-mood-grumpy-01.mp3"
+    },
+    {
+      "id": "drink-fast-01",
+      "group": "drink-fast",
+      "emotion": "happy",
+      "text": "这么快就喝啦，真乖！",
+      "file": "drink-fast-01.mp3"
+    },
+    {
+      "id": "drink-fast-02",
+      "group": "drink-fast",
+      "emotion": "proud",
+      "text": "说喝就喝，本鱼太欣慰了～",
+      "file": "drink-fast-02.mp3"
+    },
+    {
+      "id": "drink-slow-01",
+      "group": "drink-slow",
+      "emotion": "aggrieved",
+      "text": "终于喝了…本鱼等得花都谢了",
+      "file": "drink-slow-01.mp3"
+    },
+    {
+      "id": "drink-slow-02",
+      "group": "drink-slow",
+      "emotion": "aggrieved",
+      "text": "哼，拖了好久才喝，下次快一点嘛",
+      "file": "drink-slow-02.mp3"
+    },
+    {
+      "id": "drink-self-01",
+      "group": "drink-self",
+      "emotion": "happy",
+      "text": "不用本鱼提醒就自己喝水啦，好棒！",
+      "file": "drink-self-01.mp3"
+    },
+    {
+      "id": "drink-self-02",
+      "group": "drink-self",
+      "emotion": "coquettish",
+      "text": "自觉喝水的主人最可爱了～",
+      "file": "drink-self-02.mp3"
+    },
+    {
+      "id": "drink-half-01",
+      "group": "drink-half",
+      "emotion": "happy",
+      "text": "已经喝了一半啦，继续加油！",
+      "file": "drink-half-01.mp3"
+    },
+    {
+      "id": "drink-almost-01",
+      "group": "drink-almost",
+      "emotion": "happy",
+      "text": "就差一点点就达标啦！",
+      "file": "drink-almost-01.mp3"
+    },
+    {
+      "id": "drink-after-goal-01",
+      "group": "drink-after-goal",
+      "emotion": "proud",
+      "text": "达标之后还在喝，超级棒！",
+      "file": "drink-after-goal-01.mp3"
+    },
+    {
+      "id": "drink-after-goal-02",
+      "group": "drink-after-goal",
+      "emotion": "happy",
+      "text": "水分满满，本鱼给你点个赞！",
+      "file": "drink-after-goal-02.mp3"
+    },
+    {
+      "id": "scared-02",
+      "group": "scared",
+      "emotion": "surprised",
+      "text": "哇！吓死本鱼了！",
+      "file": "scared-02.mp3"
+    },
+    {
+      "id": "scared-03",
+      "group": "scared",
+      "emotion": "surprised",
+      "text": "慢点慢点！本鱼的心脏受不了！",
+      "file": "scared-03.mp3"
+    },
+    {
+      "id": "scared-04",
+      "group": "scared",
+      "emotion": "aggrieved",
+      "text": "咕噜咕噜…突然冲过来干嘛呀",
+      "file": "scared-04.mp3"
+    },
+    {
+      "id": "teaser-pounce-01",
+      "group": "teaser-pounce",
+      "emotion": "happy",
+      "text": "别跑！本鱼来啦！",
+      "file": "teaser-pounce-01.mp3"
+    },
+    {
+      "id": "teaser-pounce-02",
+      "group": "teaser-pounce",
+      "emotion": "proud",
+      "text": "看本鱼的泡泡攻击！",
+      "file": "teaser-pounce-02.mp3"
+    },
+    {
+      "id": "teaser-pounce-03",
+      "group": "teaser-pounce",
+      "emotion": "happy",
+      "text": "嘿嘿，再来再来！",
+      "file": "teaser-pounce-03.mp3"
+    },
+    {
+      "id": "teaser-tired-01",
+      "group": "teaser-tired",
+      "emotion": "sleepy",
+      "text": "呼…玩累了，本鱼歇会儿",
+      "file": "teaser-tired-01.mp3"
+    },
+    {
+      "id": "hug-start-01",
+      "group": "hug-start",
+      "emotion": "coquettish",
+      "text": "咕噜咕噜…抱抱好舒服",
+      "file": "hug-start-01.mp3"
+    },
+    {
+      "id": "hug-start-02",
+      "group": "hug-start",
+      "emotion": "shy",
+      "text": "嘿嘿，最喜欢你啦",
+      "file": "hug-start-02.mp3"
+    },
+    {
+      "id": "hug-start-03",
+      "group": "hug-start",
+      "emotion": "coquettish",
+      "text": "再抱一会儿嘛～",
+      "file": "hug-start-03.mp3"
+    },
+    {
+      "id": "hug-end-01",
+      "group": "hug-end",
+      "emotion": "coquettish",
+      "text": "还要抱抱～",
+      "file": "hug-end-01.mp3"
+    },
+    {
+      "id": "hug-end-02",
+      "group": "hug-end",
+      "emotion": "shy",
+      "text": "被你抱得暖暖的",
+      "file": "hug-end-02.mp3"
+    },
+    {
+      "id": "routine-work-start-01",
+      "group": "routine-work-start",
+      "emotion": "happy",
+      "text": "上班时间到啦，本鱼陪你开工！",
+      "file": "routine-work-start-01.mp3"
+    },
+    {
+      "id": "routine-work-start-02",
+      "group": "routine-work-start",
+      "emotion": "sleepy",
+      "text": "咕噜…开工啦，先喝口水醒醒神",
+      "file": "routine-work-start-02.mp3"
+    },
+    {
+      "id": "routine-lunch-start-01",
+      "group": "routine-lunch-start",
+      "emotion": "sleepy",
+      "text": "午休时间到啦，本鱼也要睡个午觉…",
+      "file": "routine-lunch-start-01.mp3"
+    },
+    {
+      "id": "routine-lunch-start-02",
+      "group": "routine-lunch-start",
+      "emotion": "coquettish",
+      "text": "中午啦，快去吃饭，吃完记得喝口水",
+      "file": "routine-lunch-start-02.mp3"
+    },
+    {
+      "id": "routine-lunch-end-01",
+      "group": "routine-lunch-end",
+      "emotion": "sleepy",
+      "text": "睡醒啦…下午也一起加油吧",
+      "file": "routine-lunch-end-01.mp3"
+    },
+    {
+      "id": "routine-lunch-end-02",
+      "group": "routine-lunch-end",
+      "emotion": "happy",
+      "text": "午休结束！喝口水清醒一下",
+      "file": "routine-lunch-end-02.mp3"
+    },
+    {
+      "id": "routine-almost-off-01",
+      "group": "routine-almost-off",
+      "emotion": "happy",
+      "text": "快下班啦，本鱼好兴奋！",
+      "file": "routine-almost-off-01.mp3"
+    },
+    {
+      "id": "routine-almost-off-02",
+      "group": "routine-almost-off",
+      "emotion": "happy",
+      "text": "再坚持一下下，马上就下班啦！",
+      "file": "routine-almost-off-02.mp3"
+    },
+    {
+      "id": "routine-overtime-01",
+      "group": "routine-overtime",
+      "emotion": "aggrieved",
+      "text": "已经下班啦，还不回家吗？",
+      "file": "routine-overtime-01.mp3"
+    },
+    {
+      "id": "routine-overtime-02",
+      "group": "routine-overtime",
+      "emotion": "coquettish",
+      "text": "加班辛苦啦…早点回家休息吧",
+      "file": "routine-overtime-02.mp3"
+    },
+    {
+      "id": "routine-overtime-03",
+      "group": "routine-overtime",
+      "emotion": "aggrieved",
+      "text": "天都黑了，本鱼想回家了…",
+      "file": "routine-overtime-03.mp3"
+    },
+    {
+      "id": "routine-off-day-01",
+      "group": "routine-off-day",
+      "emotion": "coquettish",
+      "text": "今天是休息日，还在忙呀？本鱼陪你",
+      "file": "routine-off-day-01.mp3"
+    },
+    {
+      "id": "routine-off-day-02",
+      "group": "routine-off-day",
+      "emotion": "happy",
+      "text": "放假也要记得喝水哦！",
+      "file": "routine-off-day-02.mp3"
+    },
+    {
+      "id": "reward-unlock-01",
+      "group": "reward-unlock",
+      "emotion": "happy",
+      "text": "哇！解锁新装扮啦！谢谢你好好喝水！",
+      "file": "reward-unlock-01.mp3"
+    },
+    {
+      "id": "reward-unlock-02",
+      "group": "reward-unlock",
+      "emotion": "proud",
+      "text": "本鱼有新衣服啦！好看吗？",
+      "file": "reward-unlock-02.mp3"
+    }
+  ]
+}

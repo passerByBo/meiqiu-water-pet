@@ -170,6 +170,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { backendApi, type CatMoodSnapshot, type Statistics } from '../shared/backendApi';
+import { adaptTextToSpecies, speciesInfo, type SpeciesInfo } from '../pet/species';
 
 // ---------------- 图表尺寸与配色（配色来自经过色盲校验的参考调色板） ----------------
 const WEEK_CHART = { width: 640, height: 230, top: 24, right: 12, bottom: 28, left: 36 };
@@ -187,19 +188,23 @@ const REFRESH_INTERVAL_MS = 60_000;
 
 const statistics = ref<Statistics | null>(null);
 const mood = ref<CatMoodSnapshot | null>(null);
+/** 现在养的是哪种动物（点评的口吻和心情表情跟着它） */
+const currentSpecies = ref<SpeciesInfo>(speciesInfo('cat'));
 const isTableView = ref(false);
 const tooltipText = ref('');
 const tooltipPosition = ref({ x: 0, y: 0 });
 
 async function loadData(): Promise<void> {
-  const [statisticsResult, moodResult] = await Promise.all([backendApi.getStatistics(), backendApi.getCatMood()]);
+  const [statisticsResult, moodResult, settings] = await Promise.all([backendApi.getStatistics(), backendApi.getCatMood(), backendApi.getSettings()]);
   statistics.value = statisticsResult;
   mood.value = moodResult;
+  currentSpecies.value = speciesInfo(settings.petSpecies);
 }
 
 onMounted(async () => {
   await loadData();
   void backendApi.onCatMoodChanged(snapshot => { mood.value = snapshot; });
+  void backendApi.onSettingsChanged(settings => { currentSpecies.value = speciesInfo(settings.petSpecies); });
   window.addEventListener('focus', () => void loadData());
   window.setInterval(() => void loadData(), REFRESH_INTERVAL_MS);
 });
@@ -218,11 +223,16 @@ const averageResponseText = computed(() => {
 
 const MOOD_FACES = { happy: '😸', normal: '🐱', grumpy: '😾', angry: '🙀' } as const;
 const MOOD_LABELS = { happy: '很开心', normal: '还不错', grumpy: '在闹别扭', angry: '在发脾气' } as const;
-const moodFace = computed(() => (mood.value ? MOOD_FACES[mood.value.level] : '🐱'));
+// 猫有现成的各种心情猫脸；其它动物用它自己的图标，心情看旁边的文字
+const moodFace = computed(() => {
+  if (currentSpecies.value.id !== 'cat') return currentSpecies.value.icon;
+  return mood.value ? MOOD_FACES[mood.value.level] : '🐱';
+});
 const moodLabel = computed(() => (mood.value ? MOOD_LABELS[mood.value.level] : ''));
 
-/** 煤球根据真实数据说一句点评 */
-const catComment = computed(() => {
+/** 宠物根据真实数据说一句点评（台词按猫的口吻写，再换成现在这种动物的口吻） */
+const catComment = computed(() => adaptTextToSpecies(catCommentText(), currentSpecies.value));
+function catCommentText(): string {
   const data = statistics.value;
   if (!data) return '';
   const remaining = data.dailyGoal - data.today.cups;
@@ -231,7 +241,7 @@ const catComment = computed(() => {
   if (weekGoalDays.value >= 5) return `这周有 ${weekGoalDays.value} 天达标，本喵很满意～今天还差 ${remaining} 杯。`;
   if (data.reminderResponse.ignored > data.reminderResponse.drank) return `最近总是不理本喵的提醒……今天还差 ${remaining} 杯，哼！`;
   return `今天还差 ${remaining} 杯，本喵会盯着你的！`;
-});
+}
 
 // ---------------- 最近 7 天柱状图 ----------------
 const weekMax = computed(() => Math.max(...(statistics.value?.lastSevenDays.map(day => day.cups) ?? [0])));

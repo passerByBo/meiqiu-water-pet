@@ -551,7 +551,7 @@ export class PetController {
     return [
       { id: 'drinkWater', icon: '💧', label: '我喝了一杯', run: () => void this.recordDrink('menu') },
       { id: 'undoDrink', icon: '↩', label: '撤销上一杯', run: () => void this.undoDrink() },
-      { id: 'petCat', icon: '🤚', label: '摸摸煤球', run: () => { this.brain.pet(); void backendApi.recordInteraction('pet'); } },
+      { id: 'petCat', icon: '🤚', label: `摸摸${this.petName}`, run: () => { this.brain.pet(); void backendApi.recordInteraction('pet'); } },
       { id: 'peekNow', icon: '👀', label: '去偷看你在干嘛', run: () => { if (!this.brain.tryStartPeek(true)) this.effects.say('那边没有好藏的地方…'); } },
       { id: 'zoomies', icon: '💨', label: '撒个欢', run: () => void this.brain.tryStartMischief('zoomies') },
       { id: 'trick', icon: '🎲', label: '表演一个小动作', run: () => { if (!this.brain.performTrick()) this.effects.say('现在不想表演嘛…'); } },
