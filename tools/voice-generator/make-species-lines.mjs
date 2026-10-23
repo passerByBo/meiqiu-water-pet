@@ -12,7 +12,8 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const SPECIES = {
   hamster: {
     selfName: '本仓鼠', sound: '吱', animal: '小仓鼠', owner: '铲屎官',
-    speaker: 'zh_female_mengyatou_uranus_bigtts', speechRateOffset: 6,
+    // 音色：奶气萌娃（试听对比见 docs/voice/species-audition.html）
+    speaker: 'zh_male_naiqimengwa_uranus_bigtts', speechRateOffset: 6,
     tone: '又软又糯、轻快机灵',
     rewrites: {
       'remind-02': '本仓鼠的小水瓶都快见底了，你的杯子呢？',
@@ -23,7 +24,8 @@ const SPECIES = {
   },
   shiba: {
     selfName: '本汪', sound: '汪', animal: '小柴犬', owner: '铲屎官',
-    speaker: 'zh_female_mengyatou_uranus_bigtts', speechRateOffset: 4,
+    // 音色：熊二
+    speaker: 'zh_male_xionger_uranus_bigtts', speechRateOffset: 4,
     tone: '元气满满、热情又爱撒娇',
     rewrites: {
       'remind-02': '本汪的水碗都快见底了，你的杯子呢？',
@@ -35,7 +37,8 @@ const SPECIES = {
   },
   goldfish: {
     selfName: '本鱼', sound: '咕噜', animal: '小金鱼', owner: '主人',
-    speaker: 'zh_female_mengyatou_uranus_bigtts', speechRateOffset: -6,
+    // 音色：懒音绵宝
+    speaker: 'zh_male_lanyinmianbao_uranus_bigtts', speechRateOffset: -6,
     tone: '慢悠悠、软软的、有点呆萌',
     rewrites: {
       'remind-02': '本鱼天天泡在水里，你怎么还不喝水呀？',

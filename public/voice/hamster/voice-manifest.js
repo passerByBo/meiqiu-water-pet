@@ -1,6 +1,6 @@
 window.MEIQIU_VOICE_MANIFEST = {
-  "speaker": "zh_female_mengyatou_uranus_bigtts",
-  "generatedAt": "2026-10-23T14:45:04.360Z",
+  "speaker": "zh_male_naiqimengwa_uranus_bigtts",
+  "generatedAt": "2026-10-23T15:00:24.929Z",
   "lines": [
     {
       "id": "remind-01",

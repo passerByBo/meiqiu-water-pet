@@ -1,6 +1,6 @@
 {
   "description": "小金鱼的预生成台词清单（由 make-species-lines.mjs 根据猫的台词自动生成，不要手改；要改就改脚本里的规则或改写表）",
-  "defaultSpeaker": "zh_female_mengyatou_uranus_bigtts",
+  "defaultSpeaker": "zh_male_lanyinmianbao_uranus_bigtts",
   "emotionStyles": {
     "coquettish": {
       "prompt": "用撒娇、软萌、黏人的小金鱼语气说，声音甜甜的，尾音稍微拖长；整体是慢悠悠、软软的、有点呆萌的感觉",
