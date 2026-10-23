@@ -1,10 +1,6 @@
-// 宠物种类登记表：每种动物的模型、默认名字、自称和叫声、声音、特有动作的说明。
-// 以后加新动物：在这里登记一条、写一个模型（models/ 下实现 PetModel 接口）、在动作库里给它加特有动作即可
-import { BlackCatModel } from './BlackCatModel';
-import { GoldfishModel } from './models/GoldfishModel';
-import { HamsterModel } from './models/HamsterModel';
-import { ShibaModel } from './models/ShibaModel';
-import type { PetModel } from './models/PetModel';
+// 宠物种类登记表：每种动物的默认名字、自称和叫声、特有动作的说明（只有资料，不含 3D 模型，设置窗口也能用）。
+// 以后加新动物：在这里登记一条、写一个模型（models/ 下实现 PetModel 接口，并在 speciesModels.ts 里登记）、
+// 在动作库里给它加特有动作即可
 
 export type PetSpecies = 'cat' | 'hamster' | 'shiba' | 'goldfish';
 
@@ -17,7 +13,6 @@ export interface SpeciesInfo {
   defaultName: string;
   /** 一句话介绍（设置里显示） */
   description: string;
-  createModel: () => PetModel;
   /** 自称：台词里的"本喵"换成它 */
   selfName: string;
   /** 叫声字：台词里的"喵"换成它（例如"喵～" → "汪～"） */
@@ -31,19 +26,19 @@ export interface SpeciesInfo {
 export const SPECIES: Record<PetSpecies, SpeciesInfo> = {
   cat: {
     id: 'cat', label: '黑猫', icon: '🐈‍⬛', defaultName: '煤球', description: '傲娇又黏人的小黑猫，会巡视、偷看、捣乱',
-    createModel: () => new BlackCatModel(), selfName: '本喵', soundWord: '喵', hasLegs: true, specialMoves: [],
+    selfName: '本喵', soundWord: '喵', hasLegs: true, specialMoves: [],
   },
   hamster: {
     id: 'hamster', label: '仓鼠', icon: '🐹', defaultName: '团子', description: '圆滚滚的奶黄仓鼠，爱鼓腮帮子、洗脸、囤东西',
-    createModel: () => new HamsterModel(), selfName: '本仓鼠', soundWord: '吱', hasLegs: true, specialMoves: ['鼓腮帮子'],
+    selfName: '本仓鼠', soundWord: '吱', hasLegs: true, specialMoves: ['鼓腮帮子'],
   },
   shiba: {
     id: 'shiba', label: '柴犬', icon: '🐕', defaultName: '小柴', description: '笑眯眯的柴犬，会作揖、赖地耍赖、开心了尾巴转成螺旋桨',
-    createModel: () => new ShibaModel(), selfName: '本汪', soundWord: '汪', hasLegs: true, specialMoves: ['作揖拜拜', '赖地耍赖', '螺旋桨尾巴'],
+    selfName: '本汪', soundWord: '汪', hasLegs: true, specialMoves: ['作揖拜拜', '赖地耍赖', '螺旋桨尾巴'],
   },
   goldfish: {
     id: 'goldfish', label: '金鱼', icon: '🐟', defaultName: '墨墨', description: '熊猫配色的狮头金鱼，在桌面上空游来游去、吐泡泡',
-    createModel: () => new GoldfishModel(), selfName: '本鱼', soundWord: '咕噜', hasLegs: false, specialMoves: ['吐泡泡'],
+    selfName: '本鱼', soundWord: '咕噜', hasLegs: false, specialMoves: ['吐泡泡'],
   },
 };
 

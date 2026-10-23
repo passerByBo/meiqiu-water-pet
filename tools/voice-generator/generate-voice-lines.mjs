@@ -15,6 +15,8 @@
 //   node generate-voice-lines.mjs --speaker=xxx         换一个音色
 //   node generate-voice-lines.mjs --audition=音色1,音色2  每个音色生成同一句试听，用来挑音色
 //   node generate-voice-lines.mjs --output=其它目录                默认输出到 public/voice
+//   node generate-voice-lines.mjs --lines=voice-lines.hamster.json --output=../../public/voice/hamster
+//                                                       用另一份台词清单（每种动物一份，见 make-species-lines.mjs）
 
 import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import path from 'node:path';
@@ -32,13 +34,14 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 // ---------- 解析命令行参数 ----------
 function parseArguments(argv) {
   // 默认输出到应用的 public/voice（打包进安装包；3D 小样也从这里读取）
-  const options = { force: false, only: null, speaker: null, audition: null, output: path.resolve(scriptDirectory, '../../public/voice') };
+  const options = { force: false, only: null, speaker: null, audition: null, lines: 'voice-lines.json', output: path.resolve(scriptDirectory, '../../public/voice') };
   for (const argument of argv) {
     if (argument === '--force') options.force = true;
     else if (argument.startsWith('--only=')) options.only = new Set(argument.slice(7).split(',').filter(Boolean));
     else if (argument.startsWith('--speaker=')) options.speaker = argument.slice(10);
     else if (argument.startsWith('--audition=')) options.audition = argument.slice(11).split(',').filter(Boolean);
     else if (argument.startsWith('--output=')) options.output = path.resolve(process.cwd(), argument.slice(9));
+    else if (argument.startsWith('--lines=')) options.lines = argument.slice(8);
     else throw new Error(`不认识的参数：${argument}`);
   }
   return options;
@@ -143,7 +146,7 @@ async function runWithConcurrency(tasks, limit) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const credentials = readCredentials();
-  const voiceLines = JSON.parse(await readFile(path.join(scriptDirectory, 'voice-lines.json'), 'utf8'));
+  const voiceLines = JSON.parse(await readFile(path.join(scriptDirectory, options.lines), 'utf8'));
   const speaker = options.speaker ?? voiceLines.defaultSpeaker;
 
   // 试听模式：同一句话用不同音色各生成一份

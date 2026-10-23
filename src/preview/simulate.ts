@@ -53,6 +53,11 @@ async function main(): Promise<void> {
   const brain = new CatBrain(freeSpaceMap, desktop, new PeekPlanner(desktop, freeSpaceMap), effects);
   brain.position = freeSpaceMap.cellCenter(freeSpaceMap.nearestFreeCell(1600, 950));
   brain.isReady = true;
+  // 网址参数 ?species=shiba 测试别的动物（默认黑猫）
+  const species = new URLSearchParams(window.location.search).get('species') ?? 'cat';
+  brain.species = species as typeof brain.species;
+  brain.hasLegs = species !== 'goldfish';
+  write(`测试的动物：${species}`);
   brain.setBehavior('sit', 1);
   brain.foregroundCategory = 'chat';
 
@@ -62,7 +67,11 @@ async function main(): Promise<void> {
   actionLibrary.markUsed = (id: string) => { actionCounts.set(id, (actionCounts.get(id) ?? 0) + 1); originalMarkUsed(id); };
   const recoverReasons: string[] = [];
   const originalRecover = brain.recover.bind(brain);
-  brain.recover = (reason: string) => { recoverReasons.push(reason); originalRecover(reason); };
+  brain.recover = (reason: string) => {
+    // 记下复位时的现场：在做什么、在哪儿（排查用）
+    recoverReasons.push(`${reason}（行为 ${brain.behavior}，位置 ${Math.round(brain.position.x)},${Math.round(brain.position.y)}，${brain.place}）`);
+    originalRecover(reason);
+  };
   let errorCount = 0;
   let invalidPositionFrames = 0;
 
@@ -226,8 +235,13 @@ async function main(): Promise<void> {
   write(`【容错】位置被弄坏后：${recoverReasons.length > recoversBefore ? `✅ 自动复位（${recoverReasons[recoverReasons.length - 1]}），复位后位置 (${Math.round(brain.position.x)}, ${Math.round(brain.position.y)})` : '❌ 没有复位'}`);
 
   // ---- 总结 ----
-  const neverChosen = [...new Set((await (await fetch('/config/cat-actions.json')).json()).actions.map((action: { id: string }) => action.id))]
-    .filter(id => !actionCounts.has(id as string));
+  const allActions = (await (await fetch('/config/cat-actions.json')).json()).actions as { id: string; when?: { species?: string[]; hasLegs?: boolean } }[];
+  const usableIds = allActions
+    .filter(action => (!action.when?.species || action.when.species.includes(species)) && (action.when?.hasLegs === undefined || action.when.hasLegs === brain.hasLegs))
+    .map(action => action.id);
+  const neverChosen = usableIds.filter(id => !actionCounts.has(id));
+  const wrongSpecies = [...actionCounts.keys()].filter(id => !usableIds.includes(id));
+  write(`这种动物能做 ${usableIds.length} 个动作；做了不该做的动作：${wrongSpecies.join('、') || '没有 ✅'}`);
   write();
   write(`出错次数：${errorCount}　位置无效的帧数：${invalidPositionFrames}`);
   write(`卡住复位（不含故意弄坏那次）：${recoverReasons.length - 1} 次 ${recoverReasons.slice(0, -1).join('、')}`);

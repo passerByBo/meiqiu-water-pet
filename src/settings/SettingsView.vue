@@ -5,6 +5,28 @@
       <span class="save-status" :class="saveStatus">{{ saveStatusText }}</span>
     </header>
 
+    <!-- 🐾 我的宠物 -->
+    <section>
+      <h2>🐾 我的宠物</h2>
+      <div class="species-grid">
+        <button v-for="species in SPECIES_LIST" :key="species.id" class="species-card" :class="{ selected: draft.petSpecies === species.id }"
+                @click="draft.petSpecies = species.id">
+          <span class="species-icon">{{ species.icon }}</span>
+          <b>{{ draft.petNames[species.id] || species.defaultName }}</b>
+          <span class="species-label">{{ species.label }}</span>
+        </button>
+      </div>
+      <p class="hint">{{ currentSpecies.description }}</p>
+      <div class="row">
+        <label>给{{ currentSpecies.label }}起个名字</label>
+        <div class="control">
+          <input :value="draft.petNames[draft.petSpecies] ?? ''" class="name-input" maxlength="8" :placeholder="`默认叫${currentSpecies.defaultName}`"
+                 @input="renamePet(($event.target as HTMLInputElement).value)">
+        </div>
+      </div>
+      <p class="hint">换宠物后，喝水记录、统计、设置、已解锁的装扮都还在；每只宠物的心情和亲密度各自记着，换回来时它还记得你。</p>
+    </section>
+
     <!-- 🐱 关于你 -->
     <section>
       <h2>🐱 关于你</h2>
@@ -272,6 +294,7 @@ import {
   backendApi, type ActivityLevel, type AppSettings, type Chattiness, type CustomReminder, type MischiefLevel, type Statistics,
 } from '../shared/backendApi';
 import { catConfig, loadCatConfig, type RewardRule } from '../pet/catConfig';
+import { SPECIES_LIST, speciesInfo } from '../pet/species';
 
 const WEEKDAYS = [
   { value: 1, label: '一' }, { value: 2, label: '二' }, { value: 3, label: '三' }, { value: 4, label: '四' },
@@ -308,6 +331,18 @@ const saveStatusText = computed(() => ({
   saved: '✓ 已保存',
   error: `保存失败：${saveErrorMessage.value}`,
 }[saveStatus.value]));
+
+// ---- 宠物 ----
+const currentSpecies = computed(() => speciesInfo(draft.value?.petSpecies));
+
+/** 改当前宠物的名字；清空就恢复默认名字 */
+function renamePet(name: string): void {
+  if (!draft.value) return;
+  const names = { ...draft.value.petNames };
+  if (name.trim()) names[draft.value.petSpecies] = name;
+  else delete names[draft.value.petSpecies];
+  draft.value.petNames = names;
+}
 
 // ---- 装扮 ----
 const rewardRules = ref<RewardRule[]>([]);
@@ -516,6 +551,23 @@ h2 {
 }
 .title-input { flex: 1; }
 .name-input { width: 190px; }
+.species-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+.species-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px 8px;
+  border: 2px solid #ece9e3;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+.species-card.selected { border-color: #4fb4f5; background: #f2f9ff; }
+.species-icon { font-size: 28px; }
+.species-label { color: #888; font-size: 12px; }
 .presets { display: flex; gap: 8px; margin-left: auto; }
 .summary { margin: 4px 0 0; color: #3a7bd5; }
 .rewards { display: flex; flex-direction: column; gap: 6px; }

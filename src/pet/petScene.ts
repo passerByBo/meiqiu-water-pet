@@ -1,7 +1,8 @@
 // 3D 场景：渲染器、相机、灯光、宠物模型（可以随时换成别的动物），以及"鼠标是否点在宠物身上"的射线检测
 import * as THREE from 'three';
 import { CAT_CANVAS_SIZE } from './constants';
-import { speciesInfo, type PetSpecies } from './species';
+import type { PetSpecies } from './species';
+import { createPetModel } from './speciesModels';
 import type { PetModel } from './models/PetModel';
 import type { Point } from '../shared/geometry';
 
@@ -40,7 +41,7 @@ export class PetScene {
     this.scene.add(keyLight, rimLightLeft, rimLightRight);
 
     this.species = species;
-    this.petModel = speciesInfo(species).createModel();
+    this.petModel = createPetModel(species);
     this.scene.add(this.petModel.root);
 
     const projected = new THREE.Vector3(0, 0, 0).project(this.camera);
@@ -56,7 +57,7 @@ export class PetScene {
     this.scene.remove(this.petModel.root);
     disposeObject(this.petModel.root);
     this.species = species;
-    this.petModel = speciesInfo(species).createModel();
+    this.petModel = createPetModel(species);
     this.scene.add(this.petModel.root);
     return this.petModel;
   }

@@ -524,7 +524,13 @@ export class CatBrain {
   // =====================================================================
   // 跳跃：抛物线飞过去；太远就分几次跳（蹦蹦蹦）
   // =====================================================================
-  hopTo(target: Point, onArrive: () => void, landingSurface: WindowSurface | null = null): void {
+  hopTo(rawTarget: Point, onArrive: () => void, landingSurface: WindowSurface | null = null): void {
+    // 落点限制在当前屏幕的可用区域里（例如鼠标在另一块屏幕上时扑鼠标，不能扑到屏幕外面去）
+    const workArea = this.desktop.workArea;
+    const target = {
+      x: clamp(rawTarget.x, workArea.left + 40, workArea.right - 40),
+      y: clamp(rawTarget.y, workArea.top + catPixels(130), workArea.bottom),
+    };
     const distance = Math.hypot(target.x - this.position.x, target.y - this.position.y);
     if (distance > MAX_HOP_DISTANCE) {
       const ratio = MAX_HOP_DISTANCE / distance;
@@ -1450,7 +1456,12 @@ export class CatBrain {
   private updateFollow(deltaSeconds: number): void {
     this.followSecondsLeft -= deltaSeconds;
     if (this.followSecondsLeft <= 0 || this.cursor.x < -1000) { this.setBehavior('sit', 2); return; }
-    const target = { x: this.cursor.x - catPixels(90), y: this.cursor.y + catPixels(70) };
+    // 跟着鼠标走，但不走出当前屏幕（鼠标跑到另一块屏幕上时就在边上等着）
+    const workArea = this.desktop.workArea;
+    const target = {
+      x: clamp(this.cursor.x - catPixels(90), workArea.left + 40, workArea.right - 40),
+      y: clamp(this.cursor.y + catPixels(70), workArea.top + catPixels(130), workArea.bottom),
+    };
     const deltaX = target.x - this.position.x;
     const deltaY = target.y - this.position.y;
     const distance = Math.hypot(deltaX, deltaY);
@@ -1640,6 +1651,10 @@ export class CatBrain {
       const level = this.reminder?.escalationLevel ?? 0;
       if (level === 1) { pose.earBack = .4; pose.earPerk = 0; pose.tailLift = .2; }
       if (level >= 2 || style === 'sitOnWindow' || style === 'pushCup') { pose.earBack = .9; pose.earPerk = 0; pose.pupilWidth = .7; pose.tailSwing = .8; pose.tailSpeed = 8; }
+      // 各动物等你喝水时的特有样子：柴犬作揖求你、金鱼一边等一边吐泡泡（举牌、敲窗时手 / 鳍腾不出来）
+      const isHandsFree = style !== 'sign' && style !== 'silentSign' && style !== 'knock' && style !== 'pushCup';
+      if (this.species === 'shiba' && isHandsFree && level < 2) { pose.special = 1; pose.squint = .8; }
+      if (this.species === 'goldfish' && style !== 'silentSign') pose.special = .6;
     }
     if (behavior === 'happy') { pose.squint = 1; pose.tailLift = 1.4; pose.bounce = 1; pose.headRoll = .2; }
     if (behavior === 'petted') { pose.squint = .9; pose.tailLift = 1.2; pose.headRoll = .28; pose.earBack = .25; }

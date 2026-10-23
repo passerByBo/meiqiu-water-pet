@@ -19,13 +19,14 @@ const ABILITIES = ['wander', 'peek', 'patrol', 'roll', 'sleep', 'goEdge', 'flee'
 const SOUNDS = ['purr', 'knock', 'crash', 'boing', 'meow:call', 'meow:short', 'meow:question', 'meow:scared', 'meow:complain'];
 const POSE_KEYS = ['stand', 'sit', 'lie', 'stretch', 'lifted', 'walkAmount', 'headYaw', 'headPitch', 'headRoll', 'eyeOpen', 'squint', 'pupilX', 'pupilY',
   'pupilWidth', 'earBack', 'earPerk', 'mouthOpen', 'tailLift', 'tailSwing', 'tailSpeed', 'tailWrap', 'groom', 'bounce', 'legKick', 'breathRate', 'crouch',
-  'pawsOnLedge', 'airborne', 'knock', 'holdSign', 'wiggle', 'rollAngle', 'cupVisible', 'cupPush'];
-const CONDITIONS = ['mood', 'routinePhase', 'activity', 'activityLevel', 'mischiefLevel', 'roamMode', 'timeBetween', 'weekday', 'intimacyAtLeast', 'intimacyBelow',
+  'pawsOnLedge', 'airborne', 'knock', 'holdSign', 'wiggle', 'rollAngle', 'cupVisible', 'cupPush', 'special', 'special2', 'special3'];
+const CONDITIONS = ['species', 'speciesNot', 'hasLegs', 'mood', 'routinePhase', 'activity', 'activityLevel', 'mischiefLevel', 'roamMode', 'timeBetween', 'weekday', 'intimacyAtLeast', 'intimacyBelow',
   'fullscreen', 'lowProfile', 'typing', 'cursorNearby', 'behavior', 'behaviorNot', 'quietMinutesAtLeast', 'chance'];
 const ACTION_KEYS = ['id', 'name', 'trigger', 'where', 'when', 'weight', 'moodWeight', 'phaseWeight', 'activityLevelWeight', 'mischiefLevelWeight',
   'cooldownSeconds', 'maxPerHour', 'rejectsHold', 'steps', 'disabled'];
 const STEP_KEYS = ['pose', 'seconds', 'tweak', 'animate', 'spin', 'face', 'say', 'text', 'float', 'burst', 'burstCount', 'sound', 'run'];
 const FACES = ['cursor', 'user', 'away', 'random'];
+const SPECIES = ['cat', 'hamster', 'shiba', 'goldfish'];
 
 const errors = [];
 const warnings = [];
@@ -50,6 +51,9 @@ for (const action of data.actions ?? []) {
   }
   for (const place of action.where ?? []) if (!PLACES.includes(place)) errors.push(`${where}：不认识的位置 ${place}`);
   for (const key of Object.keys(action.when ?? {})) if (!CONDITIONS.includes(key)) errors.push(`${where}：不认识的条件 ${key}`);
+  for (const species of [...(action.when?.species ?? []), ...(action.when?.speciesNot ?? [])]) {
+    if (!SPECIES.includes(species)) errors.push(`${where}：不认识的动物 ${species}`);
+  }
   if (typeof action.weight !== 'number' || action.weight < 0) errors.push(`${where}：weight 要是 0 或正数`);
   if (!Array.isArray(action.steps) || !action.steps.length) { errors.push(`${where}：没有步骤`); continue; }
   action.steps.forEach((step, index) => {
@@ -70,6 +74,23 @@ for (const action of data.actions ?? []) {
 }
 
 console.log(`动作总数：${seenIds.size}`);
+for (const species of SPECIES) {
+  const hasLegs = species !== 'goldfish';
+  const usable = (data.actions ?? []).filter(action => {
+    const when = action.when ?? {};
+    if (when.species && !when.species.includes(species)) return false;
+    if (when.speciesNot && when.speciesNot.includes(species)) return false;
+    if (when.hasLegs !== undefined && when.hasLegs !== hasLegs) return false;
+    return true;
+  });
+  const own = usable.filter(action => action.when?.species?.length === 1).length;
+  console.log(`  ${species}：能做 ${usable.length} 个动作（其中特有 ${own} 个）`);
+  for (const trigger of TRIGGERS) {
+    if (!usable.some(action => (Array.isArray(action.trigger) ? action.trigger : [action.trigger]).includes(trigger))) {
+      warnings.push(`${species} 在触发时机 ${trigger} 一个动作都没有`);
+    }
+  }
+}
 console.log('各触发时机的动作数：', countByTrigger);
 for (const trigger of TRIGGERS) if (!countByTrigger[trigger]) warnings.push(`触发时机 ${trigger} 一个动作都没有（会用代码里的保底反应）`);
 warnings.forEach(message => console.log(`⚠ ${message}`));
