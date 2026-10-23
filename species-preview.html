@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>宠物造型预览</title>
+  <style>
+    body { margin: 0; padding: 18px; font-family: "Microsoft YaHei UI", system-ui, sans-serif; background: #f2f0eb; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .board { position: relative; display: inline-block; }
+    .grid { display: grid; grid-template-columns: 90px repeat(7, 200px); gap: 8px; }
+    .header { font-size: 13px; color: #555; text-align: center; height: 26px; line-height: 26px; }
+    .species { display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: bold; color: #333; text-align: center; }
+    .cell { height: var(--cell-size, 200px); border-radius: 12px; }
+    .cell.light { background: linear-gradient(160deg, #e8eef6, #ffffff); }
+    .cell.blue { background: linear-gradient(160deg, #4b6a8f, #23314a); }
+    .cell.dark { background: #15151b; }
+    canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <h1>🐾 宠物造型预览：黑猫 · 仓鼠 · 柴犬 · 金鱼</h1>
+  <div class="board">
+    <div class="grid" id="grid"></div>
+    <canvas id="canvas"></canvas>
+  </div>
+  <script type="module" src="/src/preview/speciesPreview.ts"></script>
+</body>
+</html>

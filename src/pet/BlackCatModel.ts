@@ -27,6 +27,8 @@ const COLORS = {
   bell: 0xf5c542,         // 金铃铛
 };
 const OUTLINE_THICKNESS = .022;
+/** 项圈前面比后面低多少（弧度）：头和身子的接缝是前低后高的 */
+const COLLAR_FRONT_DROP = .35;
 
 export function createDefaultPose() {
   return {
@@ -45,6 +47,7 @@ export function createDefaultPose() {
     rollAngle: 0,     // 打滚的角度（直接设置，不做平滑）
     cupVisible: 0,    // 身边是否放着小水杯
     cupPush: 0,       // 推杯子的进度 0~1（直接设置，不做平滑）
+    special: 0,       // 每种动物特有动作的程度：仓鼠鼓腮帮 / 柴犬吐舌头 / 金鱼吐泡泡（猫没用到）
   };
 }
 export type CatPose = ReturnType<typeof createDefaultPose>;
@@ -253,6 +256,8 @@ export class BlackCatModel {
   private tailTurnOffset = 0;
   private previousRootYaw = 0;
   private readonly bell = new THREE.Group();
+  /** 项圈（连同铃铛）：每帧抵消身子的前后倾斜，保持水平地套在脖子上 */
+  private readonly collarGroup = new THREE.Group();
   /** 道具：举在胸前的小牌子、身边的小水杯 */
   private readonly sign = new THREE.Group();
   private readonly signTexture: THREE.CanvasTexture;
@@ -323,15 +328,19 @@ export class BlackCatModel {
     this.hips.add(this.chest);
     this.chest.add(ellipsoid(furMaterial, .3, .31, .26));
 
-    // 红项圈 + 金铃铛
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(.28, .048, 12, 40), collarMaterial);
-    collar.position.set(0, .07, .15);
-    collar.rotation.x = Math.PI / 2 - .55;
-    this.chest.add(withOutline(collar));
-    this.bell.position.set(0, -.02, .4);
-    this.bell.add(ellipsoid(bellMaterial, .058, .058, .058));
-    this.bell.add(ellipsoid(solidDecal(0x5a3d06), .03, .008, .01, 0, -.02, .052, false)); // 铃铛开口
-    this.chest.add(this.bell);
+    // 红项圈 + 金铃铛：Q 版大头和身子直接连在一起、看不到脖子，所以项圈套在"头和身子的接缝"上——
+    // 前面在下巴底下（低）、后面在后脑勺下面（高），是一个前低后高的斜圈；细一点，刚好露出一圈；铃铛挂在下巴下面
+    this.collarGroup.position.set(0, .07, .02);
+    this.chest.add(this.collarGroup);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(.27, .03, 10, 56), collarMaterial);
+    collar.rotation.x = Math.PI / 2;
+    this.collarGroup.add(withOutline(collar));
+    this.bell.position.set(0, -.055, .295);
+    this.bell.add(withOutline(new THREE.Mesh(new THREE.TorusGeometry(.018, .007, 6, 12), bellMaterial)));   // 挂铃铛的小环
+    this.bell.children[0].position.y = .045;
+    this.bell.add(ellipsoid(bellMaterial, .046, .046, .046));
+    this.bell.add(ellipsoid(solidDecal(0x5a3d06), .024, .006, .008, 0, -.016, .041, false)); // 铃铛开口
+    this.collarGroup.add(this.bell);
 
     // ---------- 头部（Q 版大头） ----------
     this.neck.position.set(0, .18, .08);
@@ -514,15 +523,15 @@ export class BlackCatModel {
     // 暖暖小围巾：套在项圈的位置（比项圈粗一圈），前面垂下一截围巾尾巴
     const scarf = new THREE.Group();
     const scarfMaterial = createToonMaterial(0x5fa8e8, toonGradient, .2);
-    const scarfRing = withOutline(new THREE.Mesh(new THREE.TorusGeometry(.29, .075, 12, 40), scarfMaterial));
-    scarfRing.position.set(0, .07, .15);
-    scarfRing.rotation.x = Math.PI / 2 - .55;
-    const scarfTail = ellipsoid(scarfMaterial, .07, .13, .03, .13, -.1, .36);
-    scarfTail.rotation.set(.3, 0, .25);
-    const scarfStripe = ellipsoid(createToonMaterial(0xffffff, toonGradient, .1), .072, .02, .032, .13, -.16, .37, false);
-    scarfStripe.rotation.set(.3, 0, .25);
+    // 围巾和项圈一样挂在项圈组里，坐着站着都平平地围在脖子上
+    const scarfRing = withOutline(new THREE.Mesh(new THREE.TorusGeometry(.28, .06, 12, 56), scarfMaterial));
+    scarfRing.rotation.x = Math.PI / 2;
+    const scarfTail = ellipsoid(scarfMaterial, .065, .12, .028, .12, -.13, .28);
+    scarfTail.rotation.set(.1, 0, .25);
+    const scarfStripe = ellipsoid(createToonMaterial(0xffffff, toonGradient, .1), .067, .018, .03, .12, -.19, .29, false);
+    scarfStripe.rotation.set(.1, 0, .25);
     scarf.add(scarfRing, scarfTail, scarfStripe);
-    this.chest.add(scarf);
+    this.collarGroup.add(scarf);
     // 小皇冠：头顶两只耳朵中间，金色圆环 + 五个尖尖 + 红宝石
     const crown = new THREE.Group();
     const goldMaterial = createToonMaterial(COLORS.bell, toonGradient, .45);
@@ -617,8 +626,10 @@ export class BlackCatModel {
     this.neck.rotation.set(blended.neckPitch + pose.headPitch * .5 + .35 * pose.groom - pose.crouch * .12, pose.headYaw * .5 + .3 * pose.groom, 0);
     this.head.rotation.set(pose.headPitch * .5 + groomNod - bobOffset * 2, pose.headYaw * .5, pose.headRoll);
 
-    // 小铃铛跟着走路和摆头晃
-    this.bell.rotation.z = Math.sin(walkPhase * 2) * .25 * Math.min(walk, 1) + pose.headRoll * .6;
+    // 项圈：沿着头和身子的接缝，前低后高；低头 / 抬头时跟着脖子转一半；铃铛一直竖直地挂着，跟着走路和摆头晃
+    const collarTilt = COLLAR_FRONT_DROP + this.neck.rotation.x * .5;
+    this.collarGroup.rotation.x = collarTilt;
+    this.bell.rotation.set(-collarTilt - this.hips.rotation.x, 0, Math.sin(walkPhase * 2) * .25 * Math.min(walk, 1) + pose.headRoll * .6);
 
     // ---- 眼睛：睁眼 / 眨眼 / 开心眯成 ^ ^ / 睡觉闭成 ‿ ‿ ----
     this.blinkTimer -= deltaSeconds;
