@@ -20,6 +20,7 @@ pub fn create(app: &AppHandle, current_settings: &Settings) -> tauri::Result<()>
     let drink_item = MenuItem::with_id(app, "record-drink", "💧 我喝了一杯", true, None::<&str>)?;
     let remind_item = MenuItem::with_id(app, "remind-now", "🔔 立即提醒一次", true, None::<&str>)?;
     let statistics_item = MenuItem::with_id(app, "open-statistics", "📊 喝水统计", true, None::<&str>)?;
+    let reset_item = MenuItem::with_id(app, "reset-pet", "🩹 煤球卡住了？让它回到原位", true, None::<&str>)?;
     let voice_item = CheckMenuItem::with_id(app, "toggle-voice", "🔊 声音", true, current_settings.voice_enabled, None::<&str>)?;
     let startup_item =
         CheckMenuItem::with_id(app, "toggle-startup", "🚀 开机自启", true, current_settings.launch_at_startup, None::<&str>)?;
@@ -32,6 +33,7 @@ pub fn create(app: &AppHandle, current_settings: &Settings) -> tauri::Result<()>
             &drink_item,
             &remind_item,
             &statistics_item,
+            &reset_item,
             &PredefinedMenuItem::separator(app)?,
             &voice_item,
             &startup_item,
@@ -53,6 +55,11 @@ pub fn create(app: &AppHandle, current_settings: &Settings) -> tauri::Result<()>
                 let _ = app.emit("tray-action", "record-drink");
             }
             "remind-now" => reminder::trigger_now(app),
+            // 复位：让前端把猫放回安全位置；同时确保窗口是显示的、点击穿透是打开的（不会挡住你点别的东西）
+            "reset-pet" => {
+                pet_window::show(app);
+                let _ = app.emit("tray-action", "reset-pet");
+            }
             "toggle-voice" => settings::modify(app, |settings| settings.voice_enabled = !settings.voice_enabled),
             "toggle-startup" => settings::modify(app, |settings| settings.launch_at_startup = !settings.launch_at_startup),
             "open-settings" => settings::open_window(app),

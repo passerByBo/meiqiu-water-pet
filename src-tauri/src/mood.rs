@@ -13,12 +13,18 @@ const INTIMACY_KEY: &str = "intimacy";
 const LAST_VISIT_DATE_KEY: &str = "lastVisitDate";
 /// 每天最多有多少次摸摸能加心情和亲密度（防止刷）
 const MAX_COUNTED_PETS_PER_DAY: u32 = 30;
+const MAX_COUNTED_HUGS_PER_DAY: u32 = 10;
+const MAX_COUNTED_PLAYS_PER_DAY: u32 = 20;
 
 /// 会影响心情的事情
 pub enum MoodEvent {
     Drank,
     GoalReached,
     Petted,
+    /// 按住抱抱
+    Hugged,
+    /// 用鼠标逗猫棒陪它玩
+    Played,
     ReminderSnoozed,
     ReminderIgnored,
     /// 每分钟一次：根据喝水进度慢慢变化（deficit = 应该喝的杯数 - 实际喝的杯数）
@@ -84,6 +90,12 @@ pub fn apply(app: &AppHandle, event: MoodEvent) {
             MoodEvent::Petted => {
                 if database.interactions_today("pet") <= MAX_COUNTED_PETS_PER_DAY { (3.0, 1) } else { (0.0, 0) }
             }
+            MoodEvent::Hugged => {
+                if database.interactions_today("hug") <= MAX_COUNTED_HUGS_PER_DAY { (5.0, 2) } else { (0.0, 0) }
+            }
+            MoodEvent::Played => {
+                if database.interactions_today("play") <= MAX_COUNTED_PLAYS_PER_DAY { (4.0, 1) } else { (0.0, 0) }
+            }
             MoodEvent::ReminderSnoozed => (-4.0, 0),
             MoodEvent::ReminderIgnored => (-12.0, 0),
             MoodEvent::MinuteTick { deficit } => {
@@ -115,11 +127,14 @@ pub fn get_cat_mood(state: tauri::State<CatMood>) -> MoodSnapshot {
     state.snapshot()
 }
 
-/// 记录一次互动（pet 摸摸 / lift 拎起来 / peekCaught 抓包 …）
+/// 记录一次互动（pet 摸摸 / hug 抱抱 / play 逗猫 / lift 拎起来 / peekCaught 抓包 …）
 #[tauri::command]
 pub fn record_interaction(app: AppHandle, kind: String) {
     app.state::<Database>().record_interaction(&kind);
-    if kind == "pet" {
-        apply(&app, MoodEvent::Petted);
+    match kind.as_str() {
+        "pet" => apply(&app, MoodEvent::Petted),
+        "hug" => apply(&app, MoodEvent::Hugged),
+        "play" => apply(&app, MoodEvent::Played),
+        _ => {}
     }
 }

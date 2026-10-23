@@ -104,6 +104,13 @@ export interface Statistics {
   };
   totalDays: number;
   totalCups: number;
+  /** 一共有多少天达标（不要求连续） */
+  goalDaysTotal: number;
+}
+
+export interface UnlockedReward {
+  id: string;
+  unlockedAt: string;
 }
 
 export type VoiceMode = 'full' | 'meowOnly';
@@ -121,12 +128,22 @@ export interface TimePeriod {
   end: string;
 }
 
+/** 定时提醒方式：固定时间一次 / 下班前多少分钟 / 时间段内每隔一段时间 */
+export type CustomReminderMode = 'once' | 'beforeWorkEnd' | 'repeat';
+
 /** 定时提醒（例如 17:00 录单子、17:30 下班打卡） */
 export interface CustomReminder {
   id: string;
   enabled: boolean;
-  /** "HH:MM" */
+  mode: CustomReminderMode;
+  /** "HH:MM"；repeat 模式是时间段的开始 */
   time: string;
+  /** repeat 模式：时间段的结束 */
+  endTime: string;
+  /** repeat 模式：每隔多少分钟 */
+  repeatIntervalMinutes: number;
+  /** beforeWorkEnd 模式：下班前多少分钟（0 = 下班那一刻） */
+  minutesBeforeWorkEnd: number;
   title: string;
   message: string;
   /** 1 = 周一 … 7 = 周日 */
@@ -144,10 +161,17 @@ export interface CustomReminderFiredPayload {
 
 /** 用户设置（字段和 Rust 端 settings.rs 一一对应） */
 export interface AppSettings {
+  /** 怎么称呼主人（空着就叫"你"） */
+  ownerName: string;
+  // 作息
+  /** 上下班时间；enabled = 只在上班时间提醒喝水 */
+  workHours: TimePeriod;
+  /** 哪几天上班：1 = 周一 … 7 = 周日 */
+  workWeekdays: number[];
+  lunchBreak: TimePeriod;
   // 提醒
   remindIntervalMinutes: number;
   snoozeMinutes: number;
-  workHours: TimePeriod;
   quietPeriods: TimePeriod[];
   fullscreenDoNotDisturb: boolean;
   awayThresholdMinutes: number;
@@ -168,6 +192,8 @@ export interface AppSettings {
   catSizePercent: number;
   /** 话多程度（闲聊的频率） */
   chattiness: Chattiness;
+  /** 正在穿的装扮（none 或已解锁的装扮 id） */
+  equippedAccessory: string;
   // 系统
   launchAtStartup: boolean;
 }
@@ -193,6 +219,9 @@ export const backendApi = {
   getReminderStatus: () => invoke<ReminderStatus>('get_reminder_status'),
   snoozeCustomReminder: (id: string) => invoke<void>('snooze_custom_reminder', { id }),
   completeCustomReminder: (id: string) => invoke<void>('complete_custom_reminder', { id }),
+  /** 返回 true 表示这次是新解锁的 */
+  unlockReward: (id: string) => invoke<boolean>('unlock_reward', { id }),
+  getUnlockedRewards: () => invoke<UnlockedReward[]>('get_unlocked_rewards'),
 
   getSettings: () => invoke<AppSettings>('get_settings'),
   getDefaultSettings: () => invoke<AppSettings>('get_default_settings'),
@@ -208,5 +237,6 @@ export const backendApi = {
   onTrayAction: (handler: (action: string) => void) => subscribe('tray-action', handler),
   onSettingsChanged: (handler: (settings: AppSettings) => void) => subscribe('settings-changed', handler),
   onCatMoodChanged: (handler: (mood: CatMoodSnapshot) => void) => subscribe('cat-mood-changed', handler),
+  onRewardsChanged: (handler: () => void) => subscribe<null>('rewards-changed', () => handler()),
   onTypingChanged: (handler: (isTyping: boolean) => void) => subscribe<{ isTyping: boolean }>('typing-changed', payload => handler(payload.isTyping)),
 };

@@ -3,6 +3,7 @@ mod desktop_layout;
 mod mood;
 mod pet_window;
 mod reminder;
+mod rewards;
 mod settings;
 mod storage;
 mod tray;
@@ -39,6 +40,8 @@ pub fn run() {
             settings::open_settings_window,
             settings::open_statistics_window,
             settings::read_config_override,
+            rewards::unlock_reward,
+            rewards::get_unlocked_rewards,
         ])
         .setup(|app| {
             let pet_window = app.get_webview_window(PET_WINDOW_LABEL).expect("找不到猫咪窗口");

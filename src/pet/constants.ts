@@ -23,7 +23,6 @@ export const RUN_SPEED = 210;                     // 奔跑速度
 export const STRIDE_LENGTH = 46;                  // 一个完整步伐对应的移动距离，避免"滑步"
 export const ACTIVE_FPS = 30;                     // 正常渲染帧率
 export const SLEEP_FPS = 10;                      // 睡觉时降低帧率省电
-export const SCARE_CURSOR_SPEED = 1400;           // 鼠标冲过来超过这个速度会吓到猫（像素/秒）
 export const PEEK_DUCK_CURSOR_SPEED = 900;        // 偷看时鼠标冲过来超过这个速度就缩回去
 // 下面三个是 100% 大小时的像素数，使用时要经过 catPixels() 换算
 export const PEEK_SIDE_DEPTH = 52;                // 从窗口侧边探头时，脚底藏在边线内多少像素

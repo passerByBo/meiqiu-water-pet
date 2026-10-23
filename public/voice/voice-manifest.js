@@ -1,6 +1,6 @@
 window.MEIQIU_VOICE_MANIFEST = {
   "speaker": "zh_female_mengyatou_uranus_bigtts",
-  "generatedAt": "2026-10-23T09:46:35.092Z",
+  "generatedAt": "2026-10-23T10:09:59.190Z",
   "lines": [
     {
       "id": "remind-01",
@@ -1042,6 +1042,195 @@ window.MEIQIU_VOICE_MANIFEST = {
       "emotion": "happy",
       "text": "水分满满，本喵给你点个赞！",
       "file": "drink-after-goal-02.mp3"
+    },
+    {
+      "id": "scared-02",
+      "group": "scared",
+      "emotion": "surprised",
+      "text": "哇！吓死本喵了！",
+      "file": "scared-02.mp3"
+    },
+    {
+      "id": "scared-03",
+      "group": "scared",
+      "emotion": "surprised",
+      "text": "慢点慢点！本喵的心脏受不了！",
+      "file": "scared-03.mp3"
+    },
+    {
+      "id": "scared-04",
+      "group": "scared",
+      "emotion": "aggrieved",
+      "text": "喵呜…突然冲过来干嘛呀",
+      "file": "scared-04.mp3"
+    },
+    {
+      "id": "teaser-pounce-01",
+      "group": "teaser-pounce",
+      "emotion": "happy",
+      "text": "别跑！本喵来啦！",
+      "file": "teaser-pounce-01.mp3"
+    },
+    {
+      "id": "teaser-pounce-02",
+      "group": "teaser-pounce",
+      "emotion": "proud",
+      "text": "看本喵的猫猫拳！",
+      "file": "teaser-pounce-02.mp3"
+    },
+    {
+      "id": "teaser-pounce-03",
+      "group": "teaser-pounce",
+      "emotion": "happy",
+      "text": "嘿嘿，再来再来！",
+      "file": "teaser-pounce-03.mp3"
+    },
+    {
+      "id": "teaser-tired-01",
+      "group": "teaser-tired",
+      "emotion": "sleepy",
+      "text": "呼…玩累了，本喵歇会儿",
+      "file": "teaser-tired-01.mp3"
+    },
+    {
+      "id": "hug-start-01",
+      "group": "hug-start",
+      "emotion": "coquettish",
+      "text": "呼噜呼噜…抱抱好舒服",
+      "file": "hug-start-01.mp3"
+    },
+    {
+      "id": "hug-start-02",
+      "group": "hug-start",
+      "emotion": "shy",
+      "text": "嘿嘿，最喜欢你啦",
+      "file": "hug-start-02.mp3"
+    },
+    {
+      "id": "hug-start-03",
+      "group": "hug-start",
+      "emotion": "coquettish",
+      "text": "再抱一会儿嘛～",
+      "file": "hug-start-03.mp3"
+    },
+    {
+      "id": "hug-end-01",
+      "group": "hug-end",
+      "emotion": "coquettish",
+      "text": "还要抱抱～",
+      "file": "hug-end-01.mp3"
+    },
+    {
+      "id": "hug-end-02",
+      "group": "hug-end",
+      "emotion": "shy",
+      "text": "被你抱得暖暖的",
+      "file": "hug-end-02.mp3"
+    },
+    {
+      "id": "routine-work-start-01",
+      "group": "routine-work-start",
+      "emotion": "happy",
+      "text": "上班时间到啦，本喵陪你开工！",
+      "file": "routine-work-start-01.mp3"
+    },
+    {
+      "id": "routine-work-start-02",
+      "group": "routine-work-start",
+      "emotion": "sleepy",
+      "text": "喵…开工啦，先喝口水醒醒神",
+      "file": "routine-work-start-02.mp3"
+    },
+    {
+      "id": "routine-lunch-start-01",
+      "group": "routine-lunch-start",
+      "emotion": "sleepy",
+      "text": "午休时间到啦，本喵也要睡个午觉…",
+      "file": "routine-lunch-start-01.mp3"
+    },
+    {
+      "id": "routine-lunch-start-02",
+      "group": "routine-lunch-start",
+      "emotion": "coquettish",
+      "text": "中午啦，快去吃饭，吃完记得喝口水",
+      "file": "routine-lunch-start-02.mp3"
+    },
+    {
+      "id": "routine-lunch-end-01",
+      "group": "routine-lunch-end",
+      "emotion": "sleepy",
+      "text": "睡醒啦…下午也一起加油吧",
+      "file": "routine-lunch-end-01.mp3"
+    },
+    {
+      "id": "routine-lunch-end-02",
+      "group": "routine-lunch-end",
+      "emotion": "happy",
+      "text": "午休结束！喝口水清醒一下",
+      "file": "routine-lunch-end-02.mp3"
+    },
+    {
+      "id": "routine-almost-off-01",
+      "group": "routine-almost-off",
+      "emotion": "happy",
+      "text": "快下班啦，本喵好兴奋！",
+      "file": "routine-almost-off-01.mp3"
+    },
+    {
+      "id": "routine-almost-off-02",
+      "group": "routine-almost-off",
+      "emotion": "happy",
+      "text": "再坚持一下下，马上就下班啦！",
+      "file": "routine-almost-off-02.mp3"
+    },
+    {
+      "id": "routine-overtime-01",
+      "group": "routine-overtime",
+      "emotion": "aggrieved",
+      "text": "已经下班啦，还不回家吗？",
+      "file": "routine-overtime-01.mp3"
+    },
+    {
+      "id": "routine-overtime-02",
+      "group": "routine-overtime",
+      "emotion": "coquettish",
+      "text": "加班辛苦啦…早点回家休息吧",
+      "file": "routine-overtime-02.mp3"
+    },
+    {
+      "id": "routine-overtime-03",
+      "group": "routine-overtime",
+      "emotion": "aggrieved",
+      "text": "天都黑了，本喵想回家了…",
+      "file": "routine-overtime-03.mp3"
+    },
+    {
+      "id": "routine-off-day-01",
+      "group": "routine-off-day",
+      "emotion": "coquettish",
+      "text": "今天是休息日，还在忙呀？本喵陪你",
+      "file": "routine-off-day-01.mp3"
+    },
+    {
+      "id": "routine-off-day-02",
+      "group": "routine-off-day",
+      "emotion": "happy",
+      "text": "放假也要记得喝水哦！",
+      "file": "routine-off-day-02.mp3"
+    },
+    {
+      "id": "reward-unlock-01",
+      "group": "reward-unlock",
+      "emotion": "happy",
+      "text": "哇！解锁新装扮啦！谢谢你好好喝水！",
+      "file": "reward-unlock-01.mp3"
+    },
+    {
+      "id": "reward-unlock-02",
+      "group": "reward-unlock",
+      "emotion": "proud",
+      "text": "本喵有新衣服啦！好看吗？",
+      "file": "reward-unlock-02.mp3"
     }
   ]
 };

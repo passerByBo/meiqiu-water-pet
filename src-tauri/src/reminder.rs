@@ -5,7 +5,7 @@
 use crate::desktop_layout;
 use crate::mood::{self, MoodEvent};
 use crate::pet_window::PetWindowHandles;
-use crate::settings::{CustomReminder, Settings, TimePeriod};
+use crate::settings::{CustomReminder, Settings, TimePeriod, REMINDER_MODE_BEFORE_WORK_END, REMINDER_MODE_REPEAT};
 use crate::storage::{today_stat_date, Database};
 use crate::tray;
 use chrono::{Datelike, Duration as ChronoDuration, Local, NaiveDate, NaiveTime};
@@ -38,6 +38,8 @@ struct ReminderRules {
     snooze_duration: Duration,
     away_threshold: Duration,
     work_hours: TimePeriod,
+    work_weekdays: Vec<u32>,
+    lunch_break: TimePeriod,
     quiet_periods: Vec<TimePeriod>,
     fullscreen_do_not_disturb: bool,
     daily_goal: u32,
@@ -52,6 +54,8 @@ impl ReminderRules {
             snooze_duration: Duration::from_secs(settings.snooze_minutes as u64 * 60),
             away_threshold: Duration::from_secs(settings.away_threshold_minutes as u64 * 60),
             work_hours: settings.work_hours.clone(),
+            work_weekdays: settings.work_weekdays.clone(),
+            lunch_break: settings.lunch_break.clone(),
             quiet_periods: settings.quiet_periods.clone(),
             fullscreen_do_not_disturb: settings.fullscreen_do_not_disturb,
             daily_goal: settings.daily_goal,
@@ -60,12 +64,21 @@ impl ReminderRules {
         }
     }
 
-    /// 现在是否允许喝水提醒：在工作时段内（如果开启了），并且不在任何勿扰时段里
+    /// 现在是否允许喝水提醒：开启了"只在上班时间提醒"时，要是上班的日子、在上下班时间之间；
+    /// 并且不在午休和其它勿扰时段里
     fn is_reminding_allowed_now(&self) -> bool {
-        let now = Local::now().time();
-        let is_within_work_hours = !self.work_hours.enabled || self.work_hours.contains(now);
+        let local_now = Local::now();
+        let now = local_now.time();
+        let is_work_day = self.work_weekdays.contains(&local_now.weekday().number_from_monday());
+        let is_within_work_hours = !self.work_hours.enabled || (is_work_day && self.work_hours.contains(now));
+        let is_lunch_break = self.lunch_break.enabled && self.lunch_break.contains(now);
         let is_in_quiet_period = self.quiet_periods.iter().any(|period| period.enabled && period.contains(now));
-        is_within_work_hours && !is_in_quiet_period
+        is_within_work_hours && !is_lunch_break && !is_in_quiet_period
+    }
+
+    fn work_end_time(&self) -> NaiveTime {
+        NaiveTime::parse_from_str(&self.work_hours.end, TIME_FORMAT)
+            .unwrap_or_else(|_| NaiveTime::from_hms_opt(DEFAULT_DAY_END.0, DEFAULT_DAY_END.1, 0).unwrap())
     }
 
     /// 一天中"喝水的时段"：开启了工作时段就用工作时段，否则用默认的 9:00–18:00
@@ -106,8 +119,8 @@ struct ReminderInner {
     is_away: bool,
     /// 当前是否处于"不允许提醒"的时段（工作时段外 / 勿扰时段）
     is_outside_reminding_hours: bool,
-    /// 每条定时提醒最后一次提醒的日期（同一天只按时提醒一次）
-    custom_fired_dates: HashMap<String, NaiveDate>,
+    /// 每条定时提醒最后一次提醒的（日期, 第几次）：同一次只提醒一次
+    custom_fired_slots: HashMap<String, (NaiveDate, i64)>,
     /// 点了"等一下嘛"的定时提醒：什么时候再提醒
     custom_retry_times: HashMap<String, Instant>,
     /// 定时提醒在数据库里的记录 id
@@ -228,7 +241,7 @@ impl ReminderState {
             escalation_level: 0,
             is_away: false,
             is_outside_reminding_hours: false,
-            custom_fired_dates: HashMap::new(),
+            custom_fired_slots: HashMap::new(),
             custom_retry_times: HashMap::new(),
             custom_event_ids: HashMap::new(),
             has_checked_first_cup: false,
@@ -362,23 +375,47 @@ fn fire_water_reminder(app: &AppHandle, database: &Database, inner: &mut Reminde
     );
 }
 
-/// 检查每条定时提醒：今天该提醒、已经到点（3 小时内）、今天还没提醒过 → 提醒；
+/// 现在是这条定时提醒的"第几次"；还没到点 / 不在提醒时间里返回 None。
+///   once：固定时间，到点后 3 小时内算第 0 次（电脑睡眠、人不在时回来补提醒）
+///   beforeWorkEnd：下班时间往前推若干分钟，其余同 once
+///   repeat：在开始和结束时间之间，每隔 N 分钟算新的一次
+fn current_reminder_slot(reminder: &CustomReminder, current_time: NaiveTime, work_end: NaiveTime) -> Option<i64> {
+    let parse = |text: &str| NaiveTime::parse_from_str(text, TIME_FORMAT).ok();
+    if reminder.mode == REMINDER_MODE_REPEAT {
+        let (start, end) = (parse(&reminder.time)?, parse(&reminder.end_time)?);
+        if current_time < start || current_time >= end {
+            return None;
+        }
+        return Some((current_time - start).num_minutes() / reminder.repeat_interval_minutes.max(1) as i64);
+    }
+    let reminder_time = if reminder.mode == REMINDER_MODE_BEFORE_WORK_END {
+        work_end - ChronoDuration::minutes(reminder.minutes_before_work_end as i64)
+    } else {
+        parse(&reminder.time)?
+    };
+    let is_time_reached = current_time >= reminder_time && current_time - reminder_time < CUSTOM_REMINDER_GRACE_PERIOD;
+    is_time_reached.then_some(0)
+}
+
+/// 检查每条定时提醒：今天该提醒、到了新的一次、这一次还没提醒过 → 提醒；
 /// 或者之前点了"等一下嘛"、再提醒的时间到了 → 再提醒一次
 fn check_custom_reminders(app: &AppHandle, database: &Database, inner: &mut ReminderInner, now: Instant) {
     let local_now = Local::now();
     let today = today_stat_date();
     let weekday = local_now.weekday().number_from_monday();
     let current_time = local_now.time();
+    let work_end = inner.rules.work_end_time();
     for reminder in inner.rules.custom_reminders.clone().into_iter().filter(|reminder| reminder.enabled) {
-        let Ok(reminder_time) = NaiveTime::parse_from_str(&reminder.time, TIME_FORMAT) else { continue };
         let is_scheduled_today = reminder.weekdays.contains(&weekday);
-        let has_fired_today = inner.custom_fired_dates.get(&reminder.id) == Some(&today);
-        let is_time_reached = current_time >= reminder_time && current_time - reminder_time < CUSTOM_REMINDER_GRACE_PERIOD;
+        let current_slot = if is_scheduled_today { current_reminder_slot(&reminder, current_time, work_end) } else { None };
+        let is_new_slot = current_slot.is_some_and(|slot| inner.custom_fired_slots.get(&reminder.id) != Some(&(today, slot)));
         let is_retry_due = inner.custom_retry_times.get(&reminder.id).is_some_and(|retry_time| now >= *retry_time);
-        if !(is_scheduled_today && !has_fired_today && is_time_reached) && !is_retry_due {
+        if !is_new_slot && !is_retry_due {
             continue;
         }
-        inner.custom_fired_dates.insert(reminder.id.clone(), today);
+        if let Some(slot) = current_slot {
+            inner.custom_fired_slots.insert(reminder.id.clone(), (today, slot));
+        }
         inner.custom_retry_times.remove(&reminder.id);
         if let Some(event_id) = database.record_reminder_fired("custom", &reminder.id, 0) {
             inner.custom_event_ids.insert(reminder.id.clone(), event_id);

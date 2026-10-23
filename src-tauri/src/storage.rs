@@ -45,6 +45,11 @@ const MIGRATIONS: &[&str] = &[
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
      );",
+    // 版本 2：喝水达标解锁的装扮
+    "CREATE TABLE unlocked_rewards (
+        id TEXT PRIMARY KEY,
+        unlocked_at TEXT NOT NULL
+     );",
 ];
 
 pub struct Database(Mutex<Connection>);
@@ -101,6 +106,15 @@ pub struct Statistics {
     /// 一共陪伴了多少天（有过记录的天数）
     pub total_days: u32,
     pub total_cups: u32,
+    /// 一共有多少天达标（不要求连续）
+    pub goal_days_total: u32,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UnlockedReward {
+    pub id: String,
+    pub unlocked_at: String,
 }
 
 impl Database {
@@ -325,6 +339,13 @@ impl Database {
         let (total_days, total_cups): (u32, u32) = connection
             .query_row("SELECT COUNT(DISTINCT stat_date), COUNT(*) FROM drink_records", [], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(|error| error.to_string())?;
+        let goal_days_total: u32 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM (SELECT stat_date FROM drink_records GROUP BY stat_date HAVING COUNT(*) >= ?1)",
+                params![daily_goal],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
 
         Ok(Statistics {
             today: today_amount,
@@ -337,6 +358,27 @@ impl Database {
             reminder_response,
             total_days,
             total_cups,
+            goal_days_total,
         })
+    }
+
+    // ---------------- 装扮 ----------------
+
+    /// 解锁一个装扮；返回 true 表示这次是新解锁的（以前没解锁过）
+    pub fn unlock_reward(&self, id: &str) -> Result<bool, String> {
+        let connection = self.0.lock().unwrap();
+        let inserted = connection
+            .execute("INSERT OR IGNORE INTO unlocked_rewards (id, unlocked_at) VALUES (?1, ?2)", params![id, Local::now().to_rfc3339()])
+            .map_err(|error| error.to_string())?;
+        Ok(inserted > 0)
+    }
+
+    pub fn unlocked_rewards(&self) -> Result<Vec<UnlockedReward>, String> {
+        let connection = self.0.lock().unwrap();
+        let mut statement = connection.prepare("SELECT id, unlocked_at FROM unlocked_rewards ORDER BY unlocked_at").map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| Ok(UnlockedReward { id: row.get(0)?, unlocked_at: row.get(1)? }))
+            .map_err(|error| error.to_string())?;
+        Ok(rows.filter_map(Result::ok).collect())
     }
 }

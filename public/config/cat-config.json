@@ -1,5 +1,5 @@
 {
-  "description": "煤球的通用配置：说话频率、各种情境下说什么。改这个文件就能调整，不用改代码。也可以在 %APPDATA%\\com.meiqiu.waterpet\\config\\cat-config.json 放一份覆盖它（只写想改的部分）",
+  "description": "煤球的通用配置：说话频率、各种情境下说什么、行为概率、逗猫和抱抱、作息、装扮奖励。改这个文件就能调整，不用改代码。也可以在 %APPDATA%\\com.meiqiu.waterpet\\config\\cat-config.json 放一份覆盖它（只写想改的部分）",
 
   "chattiness": {
     "description": "话多程度：每档规定闲聊之间至少隔多久、闲聊时有多大概率真的开口；互动回应之间至少隔多久",
@@ -12,9 +12,9 @@
 
   "lineKinds": {
     "description": "每类台词属于哪种：essential 必须说（提醒、喝水回应）/ interaction 你操作后的回应 / ambient 闲聊（巡视点评、捣乱、心情）。支持用 * 结尾做前缀匹配",
-    "essential": ["remind*", "goal-*", "drink*", "custom-*", "snooze", "greeting", "greet-*", "wake-up-01", "welcome-back-01", "focus-long", "mode-*", "drop-*", "coming-soon", "peek-start-01"],
-    "interaction": ["peekCaught", "peek-petted-01", "lifted-01", "mood-dodge", "mischief-caught-cursor"],
-    "ambient": ["react-*", "mischief-*", "mood-*", "squeezed-01", "scared-01", "peek-cover-gone", "peek-give-up"]
+    "essential": ["remind*", "goal-*", "drink*", "custom-*", "snooze", "greeting", "greet-*", "wake-up-01", "welcome-back-01", "focus-long", "mode-*", "drop-*", "coming-soon", "peek-start-01", "routine-*", "reward-*"],
+    "interaction": ["peekCaught", "peek-petted-01", "lifted-01", "mood-dodge", "mischief-caught-cursor", "teaser-*", "hug-*"],
+    "ambient": ["react-*", "mischief-*", "mood-*", "squeezed-01", "scared*", "peek-cover-gone", "peek-give-up"]
   },
 
   "situations": {
@@ -83,5 +83,65 @@
   "reactions": {
     "description": "巡视时同一类软件至少隔多久才再点评一次（秒）",
     "sameCategoryMinGapSeconds": 1800
-  }
+  },
+
+  "behavior": {
+    "description": "行为概率：猫每次'想下一步做什么'时按这些概率选。chance 是 0~1 的概率，weights 是相对权重（越大越常见，0 表示不做）",
+    "activityFactor": { "calm": 0.6, "normal": 1, "lively": 1.3 },
+    "peekChance": { "fullscreen": 0.5, "onEdge": 0.3, "normal": 0.14 },
+    "patrolChance": 0.28,
+    "wanderChance": { "calm": 0.25, "normal": 0.5, "lively": 0.7 },
+    "wanderMoodBonus": { "happy": 0.15, "normal": 0, "grumpy": -0.2, "angry": -0.3 },
+    "mischiefChance": { "sometimes": 0.07, "often": 0.2 },
+    "mischiefMoodFactor": { "happy": 1.4, "normal": 1, "grumpy": 1, "angry": 1.2 },
+    "mischiefKinds": { "zoomies": 2, "pounce": 1, "occupyWindow": 1, "pushCup": 1, "follow": 1 },
+    "idleWeights": { "sit": 30, "stand": 12, "groom": 16, "scratch": 8, "yawn": 8, "stretch": 8, "rest": 18, "happy": 1 },
+    "onWindowWeights": { "walk": 30, "observe": 25, "hopToOther": 15, "idle": 15, "jumpDown": 15 },
+    "sulkChance": { "happy": 0, "normal": 0, "grumpy": 0.35, "angry": 0.6 },
+    "happyRollChance": 0.15,
+    "dodgePetChance": { "happy": 0, "normal": 0, "grumpy": 0.4, "angry": 0.8 },
+    "scare": { "cursorSpeed": 1200, "radius": 130, "cooldownSeconds": 4 }
+  },
+
+  "teaser": {
+    "description": "逗猫棒：在猫附近快速左右晃鼠标，windowSeconds 秒内来回 minReversals 次（每次至少 minSwingPixels 像素）它就扑过来；连扑 maxPouncesInRow 次后休息 restSeconds 秒",
+    "windowSeconds": 1.6,
+    "minReversals": 4,
+    "minSwingPixels": 35,
+    "maxDistance": 420,
+    "cooldownSeconds": 2.5,
+    "maxPouncesInRow": 4,
+    "restSeconds": 20
+  },
+
+  "hug": {
+    "description": "在猫身上按住鼠标不动多少秒算抱抱",
+    "holdSeconds": 2
+  },
+
+  "routine": {
+    "description": "作息：按设置里的上下班时间和午休算出一天的阶段，每个阶段猫的精神头不一样。phaseActivityFactor 乘在溜达/偷看/巡视的概率上，phaseIdleMultipliers 乘在发呆小动作的权重上",
+    "morningMinutes": 45,
+    "afternoonSlumpMinutes": 45,
+    "almostOffMinutes": 20,
+    "overtimeAfterMinutes": 30,
+    "overtimeRepeatMinutes": 60,
+    "maxOvertimeNudges": 3,
+    "phaseActivityFactor": { "lunch": 0.3, "afternoonSlump": 0.8, "almostOff": 1.4, "overtime": 0.7, "offDay": 0.8, "beforeWork": 0.8 },
+    "phaseIdleMultipliers": {
+      "morning": { "yawn": 2.5, "stretch": 2.5 },
+      "afternoonSlump": { "yawn": 2.5, "rest": 2 },
+      "lunch": { "rest": 4, "yawn": 2 },
+      "almostOff": { "happy": 15, "stretch": 1.5 },
+      "overtime": { "yawn": 2, "rest": 2 },
+      "offDay": { "rest": 2 }
+    }
+  },
+
+  "rewards": [
+    { "id": "flower", "name": "小花发卡",   "icon": "🌸", "description": "第一次喝水达标",   "goalDaysAtLeast": 1 },
+    { "id": "bow",    "name": "粉色蝴蝶结", "icon": "🎀", "description": "累计 3 天喝水达标", "goalDaysAtLeast": 3 },
+    { "id": "scarf",  "name": "暖暖小围巾", "icon": "🧣", "description": "连续 5 天喝水达标", "streakAtLeast": 5 },
+    { "id": "crown",  "name": "小皇冠",     "icon": "👑", "description": "连续 10 天喝水达标", "streakAtLeast": 10 }
+  ]
 }

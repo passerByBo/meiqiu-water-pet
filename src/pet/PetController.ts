@@ -13,14 +13,15 @@ import { PeekPlanner } from './PeekPlanner';
 import { PetScene } from './petScene';
 import { showSkillMenu, type CatSkill, type SkillMenuEntry } from './skills';
 import { isBusyCategory, isQuietCategory, isWatchingCategory, type ActivityCategory } from './appClassifier';
-import { catConfig, lineKindOf, loadCatConfig } from './catConfig';
+import { catConfig, lineKindOf, loadCatConfig, type RewardRule } from './catConfig';
 import { chooseDialogueGroup, type DialogueContext } from './dialogueSelector';
+import { DailyRoutine, type RoutineEvent } from './dailyRoutine';
 import {
   backendApi, type AppSettings, type CursorPayload, type CustomReminderFiredPayload, type DesktopLayoutPayload, type MoodLevel,
-  type ReminderFiredPayload, type RoamMode,
+  type ReminderFiredPayload, type RoamMode, type Statistics,
 } from '../shared/backendApi';
 import type { Point } from '../shared/geometry';
-import { clamp, damp, pickRandom, pointInRectangle, randomBetween } from '../shared/geometry';
+import { clamp, pickRandom, pointInRectangle, randomBetween } from '../shared/geometry';
 
 /** 界面状态（对话气泡），由 PetView.vue 渲染 */
 export const petUiState = reactive({
@@ -54,6 +55,17 @@ interface PetElements {
 interface PressState {
   start: Point;
   isDragging: boolean;
+  /** 按住不动够久了，正在抱抱 */
+  isHugging: boolean;
+}
+
+/** 逗猫棒检测：记录鼠标左右晃动的方向和掉头的时刻 */
+interface TeaserSwing {
+  /** 当前往哪边晃：-1 左 / 1 右 / 0 还没开始 */
+  direction: number;
+  /** 这一下晃到的最远位置 */
+  extremeX: number;
+  reversalTimes: number[];
 }
 
 export class PetController {
@@ -76,7 +88,6 @@ export class PetController {
   private singleClickTimer: number | undefined;
   private bubbleHideTimer: number | undefined;
   private reminderTimeoutTimer: number | undefined;
-  private lastCursorTime = performance.now();
   private lastFrameTime = performance.now();
   private lastRenderTime = 0;
 
@@ -97,6 +108,14 @@ export class PetController {
   /** 等你打完字再开始的提醒 */
   private pendingReminderStart: (() => void) | null = null;
   private pendingReminderSince = 0;
+
+  // ---- 逗猫棒、抱抱、作息 ----
+  private teaserSwing: TeaserSwing = { direction: 0, extremeX: 0, reversalTimes: [] };
+  private hugTimer: number | undefined;
+  private readonly routine = new DailyRoutine();
+  private lastRoutineCheckTime = -Infinity;
+  private lastErrorRecoveryTime = -Infinity;
+  private isUserAway = false;
 
   constructor(private readonly elements: PetElements) {
     this.scene = new PetScene(elements.canvas);
@@ -121,6 +140,8 @@ export class PetController {
     requestAnimationFrame(this.loop);
     window.setInterval(() => this.checkSlowConditions(), 500);
     window.setTimeout(() => void this.sayGreeting(), 1500);
+    // 启动时也检查一次装扮（比如昨天达标后没开程序）
+    window.setTimeout(() => void this.checkRewards(), 6000);
   }
 
   // ---------------- 设置与心情 ----------------
@@ -135,6 +156,16 @@ export class PetController {
     this.brain.mischiefLevel = settings.mischiefLevel;
     this.userCatScale = settings.catSizePercent / 100;
     this.applyCatSize();
+    this.scene.catModel.setAccessory(settings.equippedAccessory);
+  }
+
+  /** 把台词里对主人的称呼换成设置里填的名字；addressOwner 时有一半概率在前面加上称呼 */
+  private personalize(text: string, addressOwner = false): string {
+    const ownerName = this.settings?.ownerName?.trim();
+    if (!ownerName || !text) return text;
+    const replaced = text.replace(/两脚兽|铲屎官|主人/g, ownerName);
+    if (addressOwner && replaced === text && Math.random() < .5) return `${ownerName}，${text}`;
+    return replaced;
   }
 
   /**
@@ -227,18 +258,34 @@ export class PetController {
     });
     void backendApi.onReminderFired(payload => this.handleWaterReminder(payload));
     void backendApi.onCustomReminderFired(payload => this.startCustomReminder(payload));
-    void backendApi.onUserAway(() => this.brain.goToSleep());
-    void backendApi.onUserBack(() => this.brain.wakeUp());
+    void backendApi.onUserAway(() => { this.isUserAway = true; this.brain.goToSleep(); });
+    void backendApi.onUserBack(() => { this.isUserAway = false; this.brain.wakeUp(); });
     void backendApi.onSettingsChanged(settings => this.applySettings(settings));
     void backendApi.onCatMoodChanged(mood => this.applyMood(mood.level));
     void backendApi.onTrayAction(action => {
       if (action === 'record-drink') void this.recordDrink('tray');
+      if (action === 'reset-pet') this.resetPet('托盘手动复位');
     });
   }
 
-  /** 每半秒检查一次：等打字停下的提醒、同一个软件用了太久 */
+  /** 复位：结束拖拽 / 抱抱，打开点击穿透（不挡你点别的东西），猫回到安全的地方 */
+  private resetPet(reason: string): void {
+    window.clearTimeout(this.hugTimer);
+    this.pressState = null;
+    this.isClickThrough = true;
+    void backendApi.setClickThrough(true);
+    this.brain.recover(reason);
+  }
+
+  /** 每半秒检查一次：等打字停下的提醒、同一个软件用了太久、作息 */
   private checkSlowConditions(): void {
     const now = performance.now();
+    if (this.settings && now - this.lastRoutineCheckTime > 10_000) {
+      this.lastRoutineCheckTime = now;
+      const events = this.routine.update(this.settings, !this.isUserAway);
+      this.brain.routinePhase = this.routine.phase;
+      events.forEach(event => this.handleRoutineEvent(event));
+    }
     if (this.pendingReminderStart) {
       const hasPaused = !this.isTyping && now - this.lastTypingTime > TYPING_PAUSE_BEFORE_REMIND_MS;
       if (hasPaused || now - this.pendingReminderSince > MAX_TYPING_WAIT_MS) {
@@ -255,21 +302,54 @@ export class PetController {
     }
   }
 
+  /** 作息事件：上班伸懒腰、午休睡午觉、快下班兴奋、加班催你回家 */
+  private handleRoutineEvent(event: RoutineEvent): void {
+    if (this.brain.isReminding) return; // 正在提醒时不打断
+    // 偷看、跳跃、被拎着的时候不改动作（只说话），免得打乱正在进行的动作
+    const canChangeBehavior = !this.brain.peek && !this.brain.jump && this.brain.behavior !== 'lifted' && this.brain.behavior !== 'hugged';
+    switch (event) {
+      case 'workStart':
+        if (canChangeBehavior) this.brain.setBehavior('stretch', 2.4);
+        this.effects.sayLine('routine-work-start', { addressOwner: true, fallbackText: '上班时间到啦，本喵陪你开工！' });
+        break;
+      case 'lunchStart':
+        this.effects.sayLine('routine-lunch-start', { addressOwner: true, fallbackText: '午休时间到啦，本喵也要睡个午觉…' });
+        if (canChangeBehavior) window.setTimeout(() => this.brain.takeNap(), 4000); // 说完再去睡
+        break;
+      case 'lunchEnd':
+        this.brain.wakeFromNap();
+        this.effects.sayLine('routine-lunch-end', { fallbackText: '睡醒啦…下午也一起加油吧' });
+        break;
+      case 'almostOff':
+        if (canChangeBehavior) this.brain.getExcited();
+        this.effects.sayLine('routine-almost-off', { fallbackText: '快下班啦，本喵好兴奋！' });
+        break;
+      case 'overtime':
+        if (canChangeBehavior) this.brain.setBehavior('yawn', 1.8);
+        this.effects.sayLine('routine-overtime', { addressOwner: true, fallbackText: '已经下班啦，还不回家吗？' });
+        break;
+      case 'offDayHello':
+        this.effects.sayLine('routine-off-day', { addressOwner: true, fallbackText: '今天是休息日，还在忙呀？本喵陪你' });
+        break;
+    }
+  }
+
   // ---------------- 鼠标（Rust 推送的全局位置） ----------------
   private handleCursor(cursor: CursorPayload): void {
     const local = this.desktop.toLocal(cursor.x, cursor.y);
     const now = performance.now();
-    const elapsedSeconds = Math.max(1, now - this.lastCursorTime) / 1000;
     const brainCursor = this.brain.cursor;
-    const instantSpeed = Math.hypot(local.x - brainCursor.x, local.y - brainCursor.y) / elapsedSeconds;
-    brainCursor.speed = brainCursor.x < -1000 ? 0 : damp(brainCursor.speed, instantSpeed, 12, elapsedSeconds);
     brainCursor.x = local.x;
     brainCursor.y = local.y;
-    this.lastCursorTime = now;
+    this.brain.recordCursorSample(local.x, local.y); // 速度和"有没有冲过去"都按最近的轨迹算
 
     if (this.pressState) {
+      // 抱着的时候：松开就结束抱抱；挪动鼠标就变成拎起来
+      if (this.pressState.isHugging && !cursor.isLeftButtonDown) { this.finishPress(); return; }
       if (!this.pressState.isDragging && Math.hypot(local.x - this.pressState.start.x, local.y - this.pressState.start.y) > 6) {
+        window.clearTimeout(this.hugTimer);
         this.pressState.isDragging = true;
+        this.pressState.isHugging = false;
         this.brain.liftUp();
         void backendApi.recordInteraction('lift');
       }
@@ -279,12 +359,46 @@ export class PetController {
         return;
       }
       // 网页没收到松开事件时（例如鼠标移出窗口），以这里为准
-      if (!cursor.isLeftButtonDown) this.pressState = null;
+      if (!cursor.isLeftButtonDown) { window.clearTimeout(this.hugTimer); this.pressState = null; }
     }
 
     const isOverCat = this.isPointOnCat(local);
     this.setClickThrough(!(isOverCat || this.isPointOnBubble(local)));
     this.brain.setCursorOverCat(isOverCat); // 偷看时鼠标移到它头上：抓包！
+    this.detectTeaser(local, now);
+  }
+
+  /**
+   * 逗猫棒：鼠标在猫附近快速左右来回晃。
+   * 每次往一个方向晃够距离、再往回晃，算"掉头"一次；一小段时间内掉头够多次 → 猫扑过来
+   */
+  private detectTeaser(local: Point, now: number): void {
+    const teaser = catConfig.teaser;
+    const swing = this.teaserSwing;
+    const distanceToCat = Math.hypot(local.x - this.brain.position.x, local.y - (this.brain.position.y - catPixels(50)));
+    if (distanceToCat > teaser.maxDistance || this.pressState) {
+      swing.direction = 0;
+      swing.extremeX = local.x;
+      swing.reversalTimes = [];
+      return;
+    }
+    const offset = local.x - swing.extremeX;
+    const direction = Math.sign(offset);
+    if (swing.direction === 0) {
+      // 还没开始晃：从起点往某个方向晃够距离才算开始
+      if (Math.abs(offset) >= teaser.minSwingPixels) { swing.direction = direction; swing.extremeX = local.x; }
+    } else if (direction === swing.direction) {
+      swing.extremeX = local.x; // 继续往同一个方向晃：更新最远点
+    } else if (Math.abs(offset) >= teaser.minSwingPixels) {
+      swing.reversalTimes.push(now); // 往回晃够距离：掉头一次
+      swing.direction = direction;
+      swing.extremeX = local.x;
+    }
+    swing.reversalTimes = swing.reversalTimes.filter(time => now - time < teaser.windowSeconds * 1000);
+    if (swing.reversalTimes.length >= teaser.minReversals) {
+      swing.reversalTimes = [];
+      if (this.brain.playWithTeaser()) void backendApi.recordInteraction('play');
+    }
   }
 
   /** 拖拽结束：如果放到了另一块显示器上，猫就搬过去 */
@@ -337,11 +451,24 @@ export class PetController {
     window.addEventListener('pointerdown', event => {
       if (event.button !== 0 || !this.isPointOnCat(toLocal(event))) return;
       event.preventDefault();
-      this.pressState = { start: toLocal(event), isDragging: false };
+      this.pressState = { start: toLocal(event), isDragging: false, isHugging: false };
+      // 按住不动够久：抱抱
+      window.clearTimeout(this.hugTimer);
+      this.hugTimer = window.setTimeout(() => {
+        if (!this.pressState || this.pressState.isDragging) return;
+        if (this.brain.startHug()) {
+          this.pressState.isHugging = true;
+          void backendApi.recordInteraction('hug');
+        } else {
+          this.pressState = null; // 它躲开了：这次按压作废，松开时不再算成点击
+        }
+      }, catConfig.hug.holdSeconds * 1000);
     });
 
     window.addEventListener('pointerup', event => {
       if (event.button !== 0 || !this.pressState || this.pressState.isDragging) return;
+      if (this.pressState.isHugging) { this.finishPress(); return; } // 抱完松开，不算点击
+      window.clearTimeout(this.hugTimer);
       this.pressState = null;
       // 300 毫秒内第二次点击算双击：记一杯；否则算单击：摸摸
       const now = performance.now();
@@ -362,6 +489,14 @@ export class PetController {
       event.preventDefault(); // 不显示浏览器自带的右键菜单
       if (this.isPointOnCat(toLocal(event))) void showSkillMenu(this.buildSkillMenu(), skill => this.onComingSoonSkill(skill));
     });
+  }
+
+  /** 松开鼠标：如果正在抱抱，就结束抱抱 */
+  private finishPress(): void {
+    window.clearTimeout(this.hugTimer);
+    const wasHugging = this.pressState?.isHugging ?? false;
+    this.pressState = null;
+    if (wasHugging) this.brain.endHug();
   }
 
   // ---------------- 技能菜单 ----------------
@@ -447,7 +582,7 @@ export class PetController {
     const showBubble = () => {
       window.clearTimeout(this.bubbleHideTimer);
       const line = catVoice.pickLine(lineKey) ?? catVoice.pickLine('remind');
-      petUiState.bubbleText = line?.text ?? fallbackText;
+      petUiState.bubbleText = this.personalize(line?.text ?? fallbackText, true);
       petUiState.activeCustomReminderId = null;
       petUiState.showReminderActions = true;
       petUiState.isBubbleVisible = true;
@@ -478,7 +613,7 @@ export class PetController {
     window.clearTimeout(this.reminderTimeoutTimer);
     const showBubble = () => {
       window.clearTimeout(this.bubbleHideTimer);
-      petUiState.bubbleText = `⏰ ${payload.message}`;
+      petUiState.bubbleText = `⏰ ${this.personalize(payload.message)}`;
       petUiState.activeCustomReminderId = payload.id;
       petUiState.showReminderActions = true;
       petUiState.isBubbleVisible = true;
@@ -523,6 +658,8 @@ export class PetController {
       isImportant: true,
       fallbackText: `呼噜呼噜～今天第 ${progress.cupsToday} 杯啦 💦`,
     });
+    // 刚达标：说完话再看看有没有解锁新装扮
+    if (isGoalReached) window.setTimeout(() => void this.checkRewards(), 4000);
   }
 
   private async undoDrink(): Promise<void> {
@@ -576,7 +713,35 @@ export class PetController {
       console.warn('读取统计失败，开场问候只按时间段选', error);
     }
     const group = chooseDialogueGroup('greeting', context, candidate => catVoice.hasGroup(candidate)) ?? 'greeting';
-    this.effects.sayLine(group, { isImportant: true });
+    this.effects.sayLine(group, { isImportant: true, addressOwner: true });
+  }
+
+  // ---------------- 装扮奖励 ----------------
+  /** 看看有没有满足条件、还没解锁的装扮：解锁后自动穿上，开心地庆祝一下 */
+  private async checkRewards(knownStatistics?: Statistics): Promise<void> {
+    try {
+      const [statistics, unlocked] = await Promise.all([
+        knownStatistics ? Promise.resolve(knownStatistics) : backendApi.getStatistics(),
+        backendApi.getUnlockedRewards(),
+      ]);
+      const unlockedIds = new Set(unlocked.map(reward => reward.id));
+      const isQualified = (rule: RewardRule) =>
+        (rule.goalDaysAtLeast !== undefined || rule.streakAtLeast !== undefined) &&
+        (rule.goalDaysAtLeast === undefined || statistics.goalDaysTotal >= rule.goalDaysAtLeast) &&
+        (rule.streakAtLeast === undefined || statistics.streakDays >= rule.streakAtLeast);
+      const newlyUnlocked: RewardRule[] = [];
+      for (const rule of catConfig.rewards.filter(rule => !unlockedIds.has(rule.id) && isQualified(rule))) {
+        if (await backendApi.unlockReward(rule.id)) newlyUnlocked.push(rule);
+      }
+      const latest = newlyUnlocked[newlyUnlocked.length - 1];
+      if (!latest || !this.settings) return;
+      this.applySettings(await backendApi.updateSettings({ ...this.settings, equippedAccessory: latest.id }));
+      this.effects.burst('🎁', 3);
+      this.effects.sayLine('reward-unlock', { isImportant: true, durationMs: 4500, fallbackText: '哇！解锁新装扮啦！' });
+      window.setTimeout(() => this.effects.say(`${latest.icon} 解锁新装扮：${latest.name}！（${latest.description}）`, 4500), 3500);
+    } catch (error) {
+      console.warn('检查装扮奖励失败', error);
+    }
   }
 
   /** 闲聊、互动回应能不能说：按"话多程度"限制间隔，闲聊还要过一道概率 */
@@ -613,18 +778,19 @@ export class PetController {
     const effects: CatEffects = {
       say: (text, durationMs = 2600) => {
         window.clearTimeout(this.bubbleHideTimer);
-        petUiState.bubbleText = text;
+        petUiState.bubbleText = this.personalize(text);
         petUiState.showReminderActions = false;
         petUiState.isBubbleVisible = true;
         this.bubbleHideTimer = window.setTimeout(() => { petUiState.isBubbleVisible = false; }, durationMs);
       },
-      sayLine: (key, { durationMs = 2600, count, isImportant = false, meowKind = undefined, fallbackText = '' } = {}) => {
+      sayLine: (key, { durationMs = 2600, count, isImportant = false, meowKind = undefined, fallbackText = '', addressOwner = false } = {}) => {
         // 提醒气泡正在等你回应时，别的话不要把它盖掉
         if (petUiState.showReminderActions && !isImportant) return;
         // 按"话多程度"控制闲聊和互动回应的频率（必须说的不受限制）
         if (!isImportant && !this.isAllowedToSpeak(key)) return;
         const line = catVoice.pickLine(key, count);
-        const text = line?.text ?? fallbackText;
+        // 语音是预先生成的，只能叫"你"；气泡文字里换成主人的称呼
+        const text = this.personalize(line?.text ?? fallbackText, addressOwner);
         const showSubtitle = (estimatedDurationMs: number) => {
           if (text && !petUiState.showReminderActions) effects.say(text, Math.max(durationMs, estimatedDurationMs + 900));
         };
@@ -671,13 +837,20 @@ export class PetController {
     requestAnimationFrame(this.loop);
     const deltaSeconds = Math.min(.05, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
-    this.brain.cursor.speed = damp(this.brain.cursor.speed, 0, 4, deltaSeconds); // 鼠标停下后速度逐渐归零
-    this.brain.update(deltaSeconds);
-
-    const frameInterval = 1000 / (this.brain.isSleeping ? SLEEP_FPS : ACTIVE_FPS);
-    if (now - this.lastRenderTime < frameInterval - 1) return;
-    this.renderFrame(Math.min(.12, (now - this.lastRenderTime) / 1000));
-    this.lastRenderTime = now;
+    // 容错：大脑或渲染里任何一处出错，都不能让整个循环停掉（停掉就是猫"冻住"、点不动）；出错就复位（2 秒内最多复位一次）
+    try {
+      this.brain.update(deltaSeconds);
+      this.brain.cursor.speed = this.brain.recentCursorSpeed;
+      const frameInterval = 1000 / (this.brain.isSleeping ? SLEEP_FPS : ACTIVE_FPS);
+      if (now - this.lastRenderTime < frameInterval - 1) return;
+      this.renderFrame(Math.min(.12, (now - this.lastRenderTime) / 1000));
+      this.lastRenderTime = now;
+    } catch (error) {
+      console.error('煤球主循环出错', error);
+      if (now - this.lastErrorRecoveryTime < 2000) return;
+      this.lastErrorRecoveryTime = now;
+      try { this.resetPet(`主循环出错：${String(error)}`); } catch (recoveryError) { console.error('复位也失败了', recoveryError); }
+    }
   };
 
   private renderFrame(renderDeltaSeconds: number): void {
@@ -700,6 +873,7 @@ export class PetController {
       y: this.brain.position.y - this.groundPointInWindow.y,
     };
     const physical = this.desktop.toPhysical(this.windowOrigin.x, this.windowOrigin.y);
+    if (!Number.isFinite(physical.x) || !Number.isFinite(physical.y)) return; // 位置坏了不发给系统，大脑的自检会复位
     if (physical.x === this.lastSentPhysicalPosition.x && physical.y === this.lastSentPhysicalPosition.y) return;
     this.lastSentPhysicalPosition = physical;
     void backendApi.movePetWindow(physical.x, physical.y);

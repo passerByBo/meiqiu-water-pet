@@ -5,6 +5,51 @@
       <span class="save-status" :class="saveStatus">{{ saveStatusText }}</span>
     </header>
 
+    <!-- 🐱 关于你 -->
+    <section>
+      <h2>🐱 关于你</h2>
+      <div class="row">
+        <label>煤球怎么称呼你</label>
+        <div class="control">
+          <input v-model="draft.ownerName" class="name-input" maxlength="8" placeholder="例如：小明（不填就叫你）">
+        </div>
+      </div>
+      <p class="hint">称呼会出现在气泡文字里（例如"小明，该喝水啦"）。语音是提前录好的，所以语音里还是叫"你"。</p>
+    </section>
+
+    <!-- 🕘 作息 -->
+    <section>
+      <h2>🕘 作息</h2>
+      <div class="row">
+        <label>上下班时间</label>
+        <div class="control">
+          <input v-model="draft.workHours.start" type="time">
+          <span>上班，</span>
+          <input v-model="draft.workHours.end" type="time">
+          <span>下班</span>
+        </div>
+      </div>
+      <div class="row">
+        <label>上班的日子</label>
+        <div class="weekdays">
+          <button v-for="day in WEEKDAYS" :key="day.value" class="weekday" :class="{ selected: draft.workWeekdays.includes(day.value) }"
+                  @click="toggleDay(draft.workWeekdays, day.value)">{{ day.label }}</button>
+        </div>
+      </div>
+      <div class="row">
+        <label><input v-model="draft.lunchBreak.enabled" type="checkbox"> 午休</label>
+        <div class="control">
+          <input v-model="draft.lunchBreak.start" type="time" :disabled="!draft.lunchBreak.enabled">
+          <span>至</span>
+          <input v-model="draft.lunchBreak.end" type="time" :disabled="!draft.lunchBreak.enabled">
+        </div>
+      </div>
+      <div class="row">
+        <label><input v-model="draft.workHours.enabled" type="checkbox"> 只在上班时间提醒喝水</label>
+      </div>
+      <p class="hint">煤球会跟着你的作息走：上班时伸懒腰，午休陪你睡午觉（不提醒），快下班时很兴奋，下班后还在忙会催你回家。</p>
+    </section>
+
     <!-- ⏰ 喝水提醒 -->
     <section>
       <h2>💧 喝水提醒</h2>
@@ -22,18 +67,8 @@
           <span class="value">{{ draft.snoozeMinutes }} 分钟后再提醒</span>
         </div>
       </div>
-      <div class="row">
-        <label>
-          <input v-model="draft.workHours.enabled" type="checkbox"> 只在工作时段提醒
-        </label>
-        <div class="control">
-          <input v-model="draft.workHours.start" type="time" :disabled="!draft.workHours.enabled">
-          <span>至</span>
-          <input v-model="draft.workHours.end" type="time" :disabled="!draft.workHours.enabled">
-        </div>
-      </div>
       <div class="row column">
-        <label>勿扰时段（例如午休）</label>
+        <label>其它勿扰时段（午休在上面的"作息"里设置）</label>
         <div v-for="(period, index) in draft.quietPeriods" :key="index" class="list-item">
           <input v-model="period.enabled" type="checkbox" title="启用">
           <input v-model="period.start" type="time">
@@ -42,6 +77,7 @@
           <button class="link danger" @click="draft.quietPeriods.splice(index, 1)">删除</button>
         </div>
         <button v-if="draft.quietPeriods.length < 5" class="link" @click="addQuietPeriod">＋ 添加勿扰时段</button>
+        <p v-if="!draft.quietPeriods.length" class="hint">暂时没有其它勿扰时段</p>
       </div>
       <div class="row">
         <label><input v-model="draft.fullscreenDoNotDisturb" type="checkbox"> 全屏时（看视频、放 PPT、打游戏）不打扰</label>
@@ -58,24 +94,44 @@
     <!-- 📅 定时提醒 -->
     <section>
       <h2>📅 定时提醒</h2>
-      <p class="hint">到点煤球会跑过来提醒，点"等一下嘛"会过一会儿再提醒，直到点"做完啦"。不受工作时段和勿扰时段限制。</p>
+      <p class="hint">到点煤球会跑过来举牌提醒，点"等一下嘛"会过一会儿再提醒，直到点"做完啦"。不受上班时间和勿扰时段限制。</p>
       <div v-for="(reminder, index) in draft.customReminders" :key="reminder.id" class="custom-reminder">
         <div class="list-item">
           <input v-model="reminder.enabled" type="checkbox" title="启用">
-          <input v-model="reminder.time" type="time">
           <input v-model="reminder.title" class="title-input" maxlength="20" placeholder="标题，例如：下班打卡">
           <button class="link danger" @click="draft.customReminders.splice(index, 1)">删除</button>
         </div>
-        <input v-model="reminder.message" class="message-input" maxlength="60" placeholder="煤球要说的话" @input="reminder.voiceLineId = null">
-        <div class="weekdays">
-          <button
-            v-for="day in WEEKDAYS"
-            :key="day.value"
-            class="weekday"
-            :class="{ selected: reminder.weekdays.includes(day.value) }"
-            @click="toggleWeekday(reminder, day.value)"
-          >{{ day.label }}</button>
+        <div class="list-item">
+          <select v-model="reminder.mode">
+            <option value="once">固定时间</option>
+            <option value="beforeWorkEnd">跟着下班时间</option>
+            <option value="repeat">时间段内重复</option>
+          </select>
+          <template v-if="reminder.mode === 'once'">
+            <input v-model="reminder.time" type="time"> <span>提醒一次</span>
+          </template>
+          <template v-else-if="reminder.mode === 'beforeWorkEnd'">
+            <span>下班前</span>
+            <input v-model.number="reminder.minutesBeforeWorkEnd" type="number" min="0" max="240" step="5"> <span>分钟</span>
+            <span class="hint-inline">（{{ beforeWorkEndTime(reminder.minutesBeforeWorkEnd) }}）</span>
+          </template>
+          <template v-else>
+            <input v-model="reminder.time" type="time"> <span>至</span> <input v-model="reminder.endTime" type="time">
+            <span>每</span>
+            <input v-model.number="reminder.repeatIntervalMinutes" type="number" min="5" max="480" step="5"> <span>分钟</span>
+          </template>
         </div>
+        <input v-model="reminder.message" class="message-input" maxlength="60" placeholder="煤球要说的话" @input="reminder.voiceLineId = null">
+        <div class="list-item">
+          <div class="weekdays">
+            <button v-for="day in WEEKDAYS" :key="day.value" class="weekday" :class="{ selected: reminder.weekdays.includes(day.value) }"
+                    @click="toggleDay(reminder.weekdays, day.value)">{{ day.label }}</button>
+          </div>
+          <span class="presets">
+            <button v-for="preset in WEEKDAY_PRESETS" :key="preset.label" class="link" @click="reminder.weekdays = preset.days()">{{ preset.label }}</button>
+          </span>
+        </div>
+        <p class="hint summary">{{ describeReminder(reminder) }}</p>
       </div>
       <button v-if="draft.customReminders.length < 10" class="link" @click="addCustomReminder">＋ 添加定时提醒</button>
     </section>
@@ -170,6 +226,30 @@
       </div>
     </section>
 
+    <!-- 🎀 装扮 -->
+    <section>
+      <h2>🎀 装扮</h2>
+      <p class="hint">好好喝水就能解锁新装扮，解锁后会自动穿上，也可以在这里换。</p>
+      <div class="rewards">
+        <div class="reward" :class="{ selected: draft.equippedAccessory === 'none' }">
+          <span class="reward-icon">🐈‍⬛</span>
+          <div class="reward-text"><b>不穿装扮</b><span class="hint-inline">只戴红项圈小铃铛</span></div>
+          <button class="small-button" :disabled="draft.equippedAccessory === 'none'" @click="draft.equippedAccessory = 'none'">
+            {{ draft.equippedAccessory === 'none' ? '当前' : '换上' }}
+          </button>
+        </div>
+        <div v-for="reward in rewardRules" :key="reward.id" class="reward" :class="{ selected: draft.equippedAccessory === reward.id, locked: !unlockedRewardIds.has(reward.id) }">
+          <span class="reward-icon">{{ unlockedRewardIds.has(reward.id) ? reward.icon : '🔒' }}</span>
+          <div class="reward-text">
+            <b>{{ reward.name }}</b>
+            <span class="hint-inline">{{ reward.description }}<template v-if="!unlockedRewardIds.has(reward.id)"> · {{ rewardProgress(reward) }}</template></span>
+          </div>
+          <button v-if="unlockedRewardIds.has(reward.id)" class="small-button" :disabled="draft.equippedAccessory === reward.id"
+                  @click="draft.equippedAccessory = reward.id">{{ draft.equippedAccessory === reward.id ? '穿着' : '换上' }}</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ⚙ 系统 -->
     <section>
       <h2>⚙ 系统</h2>
@@ -188,11 +268,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { backendApi, type ActivityLevel, type AppSettings, type Chattiness, type CustomReminder, type MischiefLevel } from '../shared/backendApi';
+import {
+  backendApi, type ActivityLevel, type AppSettings, type Chattiness, type CustomReminder, type MischiefLevel, type Statistics,
+} from '../shared/backendApi';
+import { catConfig, loadCatConfig, type RewardRule } from '../pet/catConfig';
 
 const WEEKDAYS = [
   { value: 1, label: '一' }, { value: 2, label: '二' }, { value: 3, label: '三' }, { value: 4, label: '四' },
   { value: 5, label: '五' }, { value: 6, label: '六' }, { value: 7, label: '日' },
+];
+/** 定时提醒的星期快捷选择 */
+const WEEKDAY_PRESETS = [
+  { label: '工作日', days: () => [1, 2, 3, 4, 5] },
+  { label: '每天', days: () => [1, 2, 3, 4, 5, 6, 7] },
+  { label: '周末', days: () => [6, 7] },
+  { label: '同上班日', days: () => [...(draft.value?.workWeekdays ?? [1, 2, 3, 4, 5])] },
 ];
 const ACTIVITY_LEVELS: { value: ActivityLevel; label: string }[] = [
   { value: 'calm', label: '安静' }, { value: 'normal', label: '正常' }, { value: 'lively', label: '活泼' },
@@ -219,7 +309,31 @@ const saveStatusText = computed(() => ({
   error: `保存失败：${saveErrorMessage.value}`,
 }[saveStatus.value]));
 
+// ---- 装扮 ----
+const rewardRules = ref<RewardRule[]>([]);
+const unlockedRewardIds = ref(new Set<string>());
+const statistics = ref<Statistics | null>(null);
+
+async function loadRewards(): Promise<void> {
+  const [unlocked, latestStatistics] = await Promise.all([backendApi.getUnlockedRewards(), backendApi.getStatistics()]);
+  unlockedRewardIds.value = new Set(unlocked.map(reward => reward.id));
+  statistics.value = latestStatistics;
+}
+
+/** 还没解锁的装扮：显示进度，例如"已累计 1/3 天" */
+function rewardProgress(reward: RewardRule): string {
+  if (!statistics.value) return '';
+  const parts: string[] = [];
+  if (reward.goalDaysAtLeast !== undefined) parts.push(`已累计 ${Math.min(statistics.value.goalDaysTotal, reward.goalDaysAtLeast)}/${reward.goalDaysAtLeast} 天`);
+  if (reward.streakAtLeast !== undefined) parts.push(`已连续 ${Math.min(statistics.value.streakDays, reward.streakAtLeast)}/${reward.streakAtLeast} 天`);
+  return parts.join('，');
+}
+
 onMounted(async () => {
+  await loadCatConfig();
+  rewardRules.value = catConfig.rewards;
+  void loadRewards();
+  void backendApi.onRewardsChanged(() => void loadRewards());
   isApplyingFromBackend = true;
   draft.value = await backendApi.getSettings();
   // 托盘里切换了声音 / 开机自启时，同步到这个窗口
@@ -265,19 +379,56 @@ function addCustomReminder(): void {
   draft.value?.customReminders.push({
     id: `custom-${Date.now()}`,
     enabled: true,
-    time: '17:00',
+    mode: 'once',
+    time: '15:00',
+    endTime: '18:00',
+    repeatIntervalMinutes: 60,
+    minutesBeforeWorkEnd: 0,
     title: '',
     message: '喵～时间到啦！',
-    weekdays: [1, 2, 3, 4, 5],
+    weekdays: [...(draft.value?.workWeekdays ?? [1, 2, 3, 4, 5])],
     voiceLineId: null,
   });
 }
 
-function toggleWeekday(reminder: CustomReminder, day: number): void {
-  const index = reminder.weekdays.indexOf(day);
-  if (index >= 0) reminder.weekdays.splice(index, 1);
-  else reminder.weekdays.push(day);
-  reminder.weekdays.sort((first, second) => first - second);
+/** 星期按钮：点一下选中，再点一下取消 */
+function toggleDay(days: number[], day: number): void {
+  const index = days.indexOf(day);
+  if (index >= 0) days.splice(index, 1);
+  else days.push(day);
+  days.sort((first, second) => first - second);
+}
+
+const minutesOf = (time: string) => { const [hours, minutes] = time.split(':').map(Number); return hours * 60 + minutes; };
+const formatMinutes = (total: number) => {
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
+};
+
+/** "跟着下班时间"模式：算出实际几点提醒 */
+function beforeWorkEndTime(minutesBefore: number): string {
+  if (!draft.value) return '';
+  return minutesBefore ? `也就是 ${formatMinutes(minutesOf(draft.value.workHours.end) - minutesBefore)}` : `下班那一刻 ${draft.value.workHours.end}`;
+}
+
+/** 用一句话说明这条提醒什么时候会响，例如"每个工作日 17:00 提醒一次" */
+function describeReminder(reminder: CustomReminder): string {
+  const days = reminder.weekdays;
+  if (!days.length) return '⚠ 还没选哪几天提醒，这条提醒不会响';
+  const isSameDays = (expected: number[]) => expected.length === days.length && expected.every(day => days.includes(day));
+  const dayText = isSameDays([1, 2, 3, 4, 5, 6, 7]) ? '每天' : isSameDays([1, 2, 3, 4, 5]) ? '每个工作日' : isSameDays([6, 7]) ? '每个周末'
+    : `每周${days.map(day => WEEKDAYS[day - 1].label).join('、')}`;
+  const weeklyCount = (perDay: number) => `，一周 ${days.length * perDay} 次`;
+  if (reminder.mode === 'beforeWorkEnd') {
+    return `${dayText} ${beforeWorkEndTime(reminder.minutesBeforeWorkEnd).replace('也就是 ', '')} 提醒（改下班时间会跟着变）${weeklyCount(1)}`;
+  }
+  if (reminder.mode === 'repeat') {
+    const span = minutesOf(reminder.endTime) - minutesOf(reminder.time);
+    if (span <= 0) return '⚠ 结束时间要晚于开始时间';
+    const timesPerDay = Math.ceil(span / Math.max(5, reminder.repeatIntervalMinutes));
+    return `${dayText} ${reminder.time}～${reminder.endTime} 每 ${reminder.repeatIntervalMinutes} 分钟提醒，每天 ${timesPerDay} 次${weeklyCount(timesPerDay)}`;
+  }
+  return `${dayText} ${reminder.time} 提醒一次${weeklyCount(1)}`;
 }
 
 async function restoreDefaults(): Promise<void> {
@@ -364,6 +515,33 @@ h2 {
   margin-bottom: 8px;
 }
 .title-input { flex: 1; }
+.name-input { width: 190px; }
+.presets { display: flex; gap: 8px; margin-left: auto; }
+.summary { margin: 4px 0 0; color: #3a7bd5; }
+.rewards { display: flex; flex-direction: column; gap: 6px; }
+.reward {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ece9e3;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.reward.selected { border-color: #4fb4f5; background: #f2f9ff; }
+.reward.locked { opacity: .65; }
+.reward-icon { font-size: 22px; width: 28px; text-align: center; }
+.reward-text { display: flex; flex-direction: column; flex: 1; }
+.reward-text .hint-inline { margin-left: 0; font-size: 12px; }
+.small-button {
+  border: 1px solid #4fb4f5;
+  background: #fff;
+  color: #3a7bd5;
+  border-radius: 6px;
+  padding: 2px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.small-button:disabled { border-color: #ddd; color: #999; cursor: default; }
 .message-input {
   width: 100%;
   box-sizing: border-box;

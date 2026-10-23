@@ -58,14 +58,27 @@ impl TimePeriod {
     }
 }
 
+/// 定时提醒的方式
+pub const REMINDER_MODE_ONCE: &str = "once";
+pub const REMINDER_MODE_BEFORE_WORK_END: &str = "beforeWorkEnd";
+pub const REMINDER_MODE_REPEAT: &str = "repeat";
+
 /// 定时提醒（例如 17:00 录单子、17:30 下班打卡）
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CustomReminder {
     pub id: String,
     pub enabled: bool,
-    /// 提醒时间 "HH:MM"
+    /// once 固定时间提醒一次 / beforeWorkEnd 下班前多少分钟提醒一次 / repeat 时间段内每隔一段时间提醒
+    pub mode: String,
+    /// 提醒时间 "HH:MM"（repeat 模式是时间段的开始）
     pub time: String,
+    /// repeat 模式：时间段的结束 "HH:MM"
+    pub end_time: String,
+    /// repeat 模式：每隔多少分钟提醒一次
+    pub repeat_interval_minutes: u32,
+    /// beforeWorkEnd 模式：下班前多少分钟（0 表示下班那一刻）
+    pub minutes_before_work_end: u32,
     /// 简短标题，例如"下班打卡"
     pub title: String,
     /// 猫说的话
@@ -81,7 +94,11 @@ impl Default for CustomReminder {
         CustomReminder {
             id: String::new(),
             enabled: true,
+            mode: REMINDER_MODE_ONCE.into(),
             time: "17:00".into(),
+            end_time: "18:00".into(),
+            repeat_interval_minutes: 60,
+            minutes_before_work_end: 0,
             title: "提醒".into(),
             message: "喵～时间到啦！".into(),
             weekdays: vec![1, 2, 3, 4, 5],
@@ -95,6 +112,12 @@ impl CustomReminder {
         if NaiveTime::parse_from_str(&self.time, TIME_FORMAT).is_err() {
             self.time = "17:00".into();
         }
+        if NaiveTime::parse_from_str(&self.end_time, TIME_FORMAT).is_err() {
+            self.end_time = "18:00".into();
+        }
+        self.mode = choose_allowed(self.mode, &[REMINDER_MODE_ONCE, REMINDER_MODE_BEFORE_WORK_END, REMINDER_MODE_REPEAT], REMINDER_MODE_ONCE);
+        self.repeat_interval_minutes = self.repeat_interval_minutes.clamp(5, 480);
+        self.minutes_before_work_end = self.minutes_before_work_end.min(240);
         if self.id.trim().is_empty() {
             self.id = format!("custom-{index}");
         }
@@ -107,11 +130,13 @@ impl CustomReminder {
     }
 }
 
-/// 默认的两条定时提醒：17:00 录单子、17:30 下班打卡（工作日）
+/// 默认的两条定时提醒：下班前半小时录单子、下班时打卡（工作日），跟着下班时间走
 fn default_custom_reminders() -> Vec<CustomReminder> {
     vec![
         CustomReminder {
             id: "record-orders".into(),
+            mode: REMINDER_MODE_BEFORE_WORK_END.into(),
+            minutes_before_work_end: 30,
             time: "17:00".into(),
             title: "录单子".into(),
             message: "五点啦，该录单子啦！".into(),
@@ -120,6 +145,8 @@ fn default_custom_reminders() -> Vec<CustomReminder> {
         },
         CustomReminder {
             id: "clock-out".into(),
+            mode: REMINDER_MODE_BEFORE_WORK_END.into(),
+            minutes_before_work_end: 0,
             time: "17:30".into(),
             title: "下班打卡".into(),
             message: "下班时间到啦，记得打卡哦！".into(),
@@ -132,14 +159,24 @@ fn default_custom_reminders() -> Vec<CustomReminder> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
+    // ---- 主人 ----
+    /// 怎么称呼主人（气泡文字里用，空着就叫"你"）
+    pub owner_name: String,
+
+    // ---- 作息 ----
+    /// 上下班时间；enabled = 只在上班时间提醒喝水
+    pub work_hours: TimePeriod,
+    /// 哪几天上班：1 = 周一 … 7 = 周日
+    pub work_weekdays: Vec<u32>,
+    /// 午休（不提醒喝水，猫也一起睡午觉）
+    pub lunch_break: TimePeriod,
+
     // ---- 提醒 ----
     /// 多久提醒一次（分钟）
     pub remind_interval_minutes: u32,
     /// 点"等一下嘛"后多久再提醒（分钟）
     pub snooze_minutes: u32,
-    /// 只在工作时段提醒
-    pub work_hours: TimePeriod,
-    /// 勿扰时段（午休等）
+    /// 其它勿扰时段
     pub quiet_periods: Vec<TimePeriod>,
     /// 全屏应用时不打扰
     pub fullscreen_do_not_disturb: bool,
@@ -172,6 +209,8 @@ pub struct Settings {
     pub cat_size_percent: u32,
     /// 话多程度：quiet 安静 / normal 适中 / chatty 话多（闲聊的频率，提醒不受影响）
     pub chattiness: String,
+    /// 正在穿的装扮（none 或已解锁的装扮 id）
+    pub equipped_accessory: String,
 
     // ---- 系统 ----
     pub launch_at_startup: bool,
@@ -180,10 +219,13 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            owner_name: String::new(),
+            work_hours: TimePeriod { enabled: true, start: "09:00".into(), end: "17:30".into() },
+            work_weekdays: vec![1, 2, 3, 4, 5],
+            lunch_break: TimePeriod::default(),
             remind_interval_minutes: 45,
             snooze_minutes: 10,
-            work_hours: TimePeriod { enabled: true, start: "09:00".into(), end: "17:30".into() },
-            quiet_periods: vec![TimePeriod::default()],
+            quiet_periods: Vec::new(),
             fullscreen_do_not_disturb: true,
             away_threshold_minutes: 5,
             custom_reminders: default_custom_reminders(),
@@ -198,6 +240,7 @@ impl Default for Settings {
             mischief_level: "sometimes".into(),
             cat_size_percent: 75,
             chattiness: "normal".into(),
+            equipped_accessory: "none".into(),
             launch_at_startup: false,
         }
     }
@@ -228,6 +271,17 @@ impl Settings {
         self.cat_size_percent = self.cat_size_percent.clamp(50, 125);
         self.chattiness = choose_allowed(self.chattiness, &["quiet", "normal", "chatty"], "normal");
         self.work_hours = self.work_hours.sanitized("09:00", "17:30");
+        self.lunch_break = self.lunch_break.sanitized("11:30", "13:00");
+        self.work_weekdays.retain(|day| (1..=7).contains(day));
+        self.work_weekdays.sort_unstable();
+        self.work_weekdays.dedup();
+        // 称呼：去掉首尾空格和控制字符，最多 8 个字
+        self.owner_name = self.owner_name.trim().chars().filter(|character| !character.is_control()).take(8).collect();
+        let is_safe_accessory = !self.equipped_accessory.is_empty() && self.equipped_accessory.len() <= 32
+            && self.equipped_accessory.chars().all(|character| character.is_ascii_alphanumeric() || character == '-');
+        if !is_safe_accessory {
+            self.equipped_accessory = "none".into();
+        }
         self.custom_reminders.truncate(MAX_CUSTOM_REMINDERS);
         self.custom_reminders = self.custom_reminders.into_iter().enumerate().map(|(index, reminder)| reminder.sanitized(index)).collect();
         self.quiet_periods.truncate(MAX_QUIET_PERIODS);
@@ -246,9 +300,38 @@ fn settings_file_path(app: &AppHandle) -> Option<PathBuf> {
 pub fn load(app: &AppHandle) -> Settings {
     settings_file_path(app)
         .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|content| serde_json::from_str::<Settings>(&content).ok())
+        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+        .and_then(|value| {
+            let settings = serde_json::from_value::<Settings>(value.clone()).ok()?;
+            Some(migrate_old_settings(&value, settings))
+        })
         .unwrap_or_default()
         .sanitized()
+}
+
+/// 兼容旧版设置文件：
+/// 旧版没有单独的"午休"，午休是勿扰时段的第一条 → 挪到午休里；
+/// 旧版默认的"录单子 / 下班打卡"是写死的时间 → 改成跟着下班时间走（时间和默认一致时才改，用户改过的不动）
+fn migrate_old_settings(raw: &serde_json::Value, mut settings: Settings) -> Settings {
+    if raw.get("lunchBreak").is_none() && !settings.quiet_periods.is_empty() {
+        settings.lunch_break = settings.quiet_periods.remove(0);
+    }
+    for reminder in settings.custom_reminders.iter_mut() {
+        let raw_reminder = raw["customReminders"].as_array().and_then(|list| list.iter().find(|item| item["id"] == reminder.id.as_str()));
+        if raw_reminder.is_some_and(|item| item.get("mode").is_some()) {
+            continue;
+        }
+        let minutes_before = match (reminder.id.as_str(), reminder.time.as_str()) {
+            ("record-orders", "17:00") => Some(30),
+            ("clock-out", "17:30") => Some(0),
+            _ => None,
+        };
+        if let (Some(minutes), "17:30") = (minutes_before, settings.work_hours.end.as_str()) {
+            reminder.mode = REMINDER_MODE_BEFORE_WORK_END.into();
+            reminder.minutes_before_work_end = minutes;
+        }
+    }
+    settings
 }
 
 fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
@@ -324,7 +407,7 @@ fn open_page_window(app: &AppHandle, label: &'static str, page: &'static str, ti
 }
 
 pub fn open_window(app: &AppHandle) {
-    open_page_window(app, SETTINGS_WINDOW_LABEL, "settings.html", "煤球 · 设置", 480.0, 680.0);
+    open_page_window(app, SETTINGS_WINDOW_LABEL, "settings.html", "煤球 · 设置", 580.0, 720.0);
 }
 
 pub fn show_statistics_window(app: &AppHandle) {

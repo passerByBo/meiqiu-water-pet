@@ -486,6 +486,69 @@ export class BlackCatModel {
     this.cup.add(cupBody, cupHandle, water);
     this.cup.visible = false;
     this.root.add(this.cup);
+
+    // ---------- 装扮（喝水达标解锁）：都挂在头或胸口上，跟着一起动 ----------
+    // 小花发卡：右耳根前面，五片花瓣 + 黄色花心
+    const flower = new THREE.Group();
+    const petalMaterial = createToonMaterial(0xffd1e0, toonGradient, .15);
+    for (let index = 0; index < 5; index++) {
+      const angle = index / 5 * Math.PI * 2;
+      flower.add(ellipsoid(petalMaterial, .045, .045, .02, Math.cos(angle) * .05, Math.sin(angle) * .05, 0));
+    }
+    flower.add(ellipsoid(createToonMaterial(0xffd23f, toonGradient, .2), .028, .028, .022, 0, 0, .012));
+    flower.position.set(.2, .24, .2);
+    flower.rotation.set(-.2, .45, 0);
+    this.head.add(flower);
+    // 粉色蝴蝶结：左耳根，两个圆鼓鼓的翅膀 + 中间的结
+    const bow = new THREE.Group();
+    const bowMaterial = createToonMaterial(0xff6fa0, toonGradient, .2);
+    for (const side of [-1, 1]) {
+      const wing = ellipsoid(bowMaterial, .07, .048, .03, side * .065, 0, 0);
+      wing.rotation.z = side * -.35;
+      bow.add(wing);
+    }
+    bow.add(ellipsoid(bowMaterial, .03, .032, .032));
+    bow.position.set(-.21, .26, .14);
+    bow.rotation.set(-.15, -.45, .25);
+    this.head.add(bow);
+    // 暖暖小围巾：套在项圈的位置（比项圈粗一圈），前面垂下一截围巾尾巴
+    const scarf = new THREE.Group();
+    const scarfMaterial = createToonMaterial(0x5fa8e8, toonGradient, .2);
+    const scarfRing = withOutline(new THREE.Mesh(new THREE.TorusGeometry(.29, .075, 12, 40), scarfMaterial));
+    scarfRing.position.set(0, .07, .15);
+    scarfRing.rotation.x = Math.PI / 2 - .55;
+    const scarfTail = ellipsoid(scarfMaterial, .07, .13, .03, .13, -.1, .36);
+    scarfTail.rotation.set(.3, 0, .25);
+    const scarfStripe = ellipsoid(createToonMaterial(0xffffff, toonGradient, .1), .072, .02, .032, .13, -.16, .37, false);
+    scarfStripe.rotation.set(.3, 0, .25);
+    scarf.add(scarfRing, scarfTail, scarfStripe);
+    this.chest.add(scarf);
+    // 小皇冠：头顶两只耳朵中间，金色圆环 + 五个尖尖 + 红宝石
+    const crown = new THREE.Group();
+    const goldMaterial = createToonMaterial(COLORS.bell, toonGradient, .45);
+    const crownBand = withOutline(new THREE.Mesh(new THREE.CylinderGeometry(.12, .11, .07, 24, 1, true), goldMaterial));
+    crownBand.material.side = THREE.DoubleSide;
+    crown.add(crownBand);
+    for (let index = 0; index < 5; index++) {
+      const angle = index / 5 * Math.PI * 2;
+      const spike = withOutline(new THREE.Mesh(new THREE.ConeGeometry(.026, .07, 10), goldMaterial));
+      spike.position.set(Math.sin(angle) * .115, .065, Math.cos(angle) * .115);
+      crown.add(spike);
+    }
+    crown.add(ellipsoid(createToonMaterial(0xe8424f, toonGradient, .4), .025, .025, .012, 0, 0, .118));
+    crown.position.set(0, .37, .02);
+    crown.rotation.x = -.12;
+    this.head.add(crown);
+    this.accessories = new Map([['flower', flower], ['bow', bow], ['scarf', scarf], ['crown', crown]]);
+    this.setAccessory('none');
+  }
+
+  private readonly accessories: Map<string, THREE.Group>;
+
+  /** 穿上装扮（none 或 flower / bow / scarf / crown）；不认识的 id 当作不穿 */
+  setAccessory(id: string): void {
+    for (const [accessoryId, group] of this.accessories) group.visible = accessoryId === id;
+    this.bell.visible = id !== 'scarf'; // 围巾会盖住铃铛
   }
 
   /** 每帧调用：让当前姿势平滑追向目标姿势，再把参数应用到各个关节 */
