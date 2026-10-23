@@ -1,7 +1,7 @@
 // 3D 柴犬"小柴"（参考 demo/柴犬.jpeg）：赤褐色的背、"里白"（嘴巴、脸颊、胸口、肚子、四肢内侧是奶白色）、
 // 奶白色的"豆豆眉"、立起来的三角耳、黑鼻头、咧嘴微笑、白袜子、卷在背上的卷尾巴、蓝色项圈。
 // 骨架和猫一样（四条腿 + 脖子 + 头），腿更长一点，嘴巴往前突出。
-// 特有动作 special：张开嘴、吐出半截舌头（另外半截在嘴里），一边喘气一边晃
+// 特有动作：special 作揖拜拜 / special2 赖地耍赖 / special3 螺旋桨尾巴扭屁股（开心地张嘴吐一点舌头）
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose, POSE_NAMES } from '../BlackCatModel';
@@ -25,6 +25,13 @@ const KEY_POSES = {
   lie:     { hipsHeight: .22, hipsPitch: .04,  hipsShift: 0,    frontUpper: -1.45, frontKnee: .2,  backUpper: -1.25, backKnee: 2.5, neckPitch: .2 },
   stretch: { hipsHeight: .43, hipsPitch: .32,  hipsShift: -.05, frontUpper: -1.0,  frontKnee: 0,   backUpper: .15,  backKnee: 0,   neckPitch: -.3 },
   lifted:  { hipsHeight: .34, hipsPitch: -.9,  hipsShift: 0,    frontUpper: .9,    frontKnee: .15, backUpper: .9,   backKnee: .15, neckPitch: .65 },
+};
+/** 特有动作的全身姿势：按动作程度混进上面的关节角度 */
+const SPECIAL_POSES = {
+  /** 作揖：后腿蹲坐、上半身立起来，两只前爪弯着并拢在胸前 */
+  beg:  { hipsHeight: .17, hipsPitch: -1.15, hipsShift: -.1, frontUpper: -.35, frontKnee: 1.7, backUpper: -.75, backKnee: 2.5, neckPitch: .95 },
+  /** 赖地：整只趴平，前腿往前伸直、后腿往后蹬直（像青蛙一样摊开），下巴贴地 */
+  flop: { hipsHeight: .18, hipsPitch: .02,  hipsShift: 0,   frontUpper: -1.5, frontKnee: .1,  backUpper: 1.45, backKnee: .05, neckPitch: .3 },
 };
 type JointName = keyof typeof KEY_POSES.stand;
 const JOINT_NAMES = Object.keys(KEY_POSES.stand) as JointName[];
@@ -268,6 +275,17 @@ export class ShibaModel implements PetModel {
     const totalWeight = POSE_NAMES.reduce((sum, name) => sum + pose[name], 0) || 1;
     const blended = {} as Record<JointName, number>;
     for (const joint of JOINT_NAMES) blended[joint] = POSE_NAMES.reduce((sum, name) => sum + KEY_POSES[name][joint] * pose[name], 0) / totalWeight;
+    // 特有动作：作揖（special）、赖地（special2）、螺旋桨尾巴（special3）
+    const begAmount = pose.special, flopAmount = pose.special2, propellerAmount = pose.special3;
+    for (const joint of JOINT_NAMES) {
+      blended[joint] += (SPECIAL_POSES.beg[joint] - blended[joint]) * begAmount;
+      blended[joint] += (SPECIAL_POSES.flop[joint] - blended[joint]) * flopAmount;
+    }
+    // 作揖时一下一下地"拜"：前爪上下摆、上半身跟着点头
+    const bow = Math.sin(elapsedSeconds * 6) * begAmount;
+    blended.frontUpper += bow * .3;
+    blended.hipsPitch += bow * .06;
+    blended.neckPitch -= bow * .08;
 
     // ---- 走路：对角线两条腿同步（小跑） ----
     const walk = pose.walkAmount;
@@ -279,9 +297,12 @@ export class ShibaModel implements PetModel {
     const rollLift = (1 - Math.cos(pose.rollAngle)) * .32;
     this.hips.position.set(0, blended.hipsHeight - pose.crouch * .12 + bobOffset + rollLift, blended.hipsShift);
     this.hips.rotation.x = blended.hipsPitch + Math.sin(walkPhase * 2) * .02 * Math.min(walk, 1) - pose.airborne * .25;
-    this.hips.rotation.y = Math.sin(elapsedSeconds * 22) * .12 * pose.wiggle;
-    this.hips.rotation.z = pose.rollAngle;
-    this.root.position.y = Math.abs(Math.sin(elapsedSeconds * 7)) * .1 * pose.bounce;
+    // 扭屁股（捣乱前、螺旋桨尾巴时）；赖地时身子左右蹭着地面耍赖
+    this.hips.rotation.y = Math.sin(elapsedSeconds * 22) * .12 * pose.wiggle + Math.sin(elapsedSeconds * 16) * .14 * propellerAmount
+      + Math.sin(elapsedSeconds * 2.6) * .05 * flopAmount;
+    this.hips.rotation.z = pose.rollAngle + Math.sin(elapsedSeconds * 2.6) * .07 * flopAmount;
+    // 开心地蹦（螺旋桨尾巴时原地小跳）
+    this.root.position.y = Math.abs(Math.sin(elapsedSeconds * 7)) * .1 * pose.bounce + Math.abs(Math.sin(elapsedSeconds * 8)) * .06 * propellerAmount;
     const breath = 1 + Math.sin(elapsedSeconds * pose.breathRate) * .02;
     this.torso.scale.set(.31 * breath, .29 * breath, .44);
 
@@ -307,6 +328,10 @@ export class ShibaModel implements PetModel {
       upperAngle += (isFront ? -.9 : .9) * pose.airborne;
       leg.upper.rotation.x = upperAngle;
       leg.knee.rotation.x = kneeAngle;
+      // 作揖时两只前爪往中间并拢；赖地时四条腿稍微往外摊开
+      const inward = legName === 'frontLeft' ? 1 : legName === 'frontRight' ? -1 : 0;
+      const outward = legName.endsWith('Left') ? -1 : 1;
+      leg.upper.rotation.z = inward * .3 * begAmount + outward * .25 * flopAmount;
     }
 
     // ---- 项圈：沿着头和身子的接缝，前低后高；低头 / 抬头时跟着脖子转一半；铃铛一直竖直地挂着，走路时轻轻晃 ----
@@ -319,7 +344,8 @@ export class ShibaModel implements PetModel {
     // ---- 头：柴犬很爱歪头 ----
     const groomNod = Math.sin(elapsedSeconds * 9) * .08 * pose.groom;
     this.neck.rotation.set(blended.neckPitch + pose.headPitch * .5 + .35 * pose.groom - pose.crouch * .12, pose.headYaw * .5 + .3 * pose.groom, 0);
-    this.head.rotation.set(pose.headPitch * .5 + groomNod - bobOffset * 2, pose.headYaw * .5, pose.headRoll * 1.2);
+    this.head.rotation.set(pose.headPitch * .5 + groomNod - bobOffset * 2 - flopAmount * .1, pose.headYaw * .5,
+      pose.headRoll * 1.2 + Math.sin(elapsedSeconds * 8) * .12 * propellerAmount);
 
     // ---- 眼睛、耳朵（飞机耳）、嘴巴、舌头 ----
     updateEyes(this.eyes, pose, this.blinker.update(deltaSeconds), .018, elapsedSeconds);
@@ -328,18 +354,20 @@ export class ShibaModel implements PetModel {
       ear.group.rotation.x = -pose.earBack * 1.1 + pose.earPerk * .12;
       ear.group.rotation.z = ear.side * -(.2 + pose.earBack * .5);
     }
-    // ---- 张嘴、吐舌头 ----
-    // 叫的时候张嘴，只看得到嘴里的舌头；吐舌头时下巴张开，外面那半截舌头从嘴里伸出来、垂在下巴前面，一边喘气一边晃
-    const openAmount = Math.min(1, Math.max(pose.special * .9, pose.mouthOpen));
-    const panting = Math.sin(elapsedSeconds * 9) * .04 * pose.special;   // 喘气：下巴一张一合
-    this.jaw.rotation.x = openAmount * .42 + panting;
-    this.tongueTip.visible = pose.special > .03;
-    this.tongueTip.scale.set(1, Math.max(.001, pose.special), Math.max(.001, pose.special));
-    this.tongueTip.rotation.set(Math.sin(elapsedSeconds * 9 + .6) * .1 * pose.special, 0, Math.sin(elapsedSeconds * 4.5) * .08 * pose.special);
+    // ---- 张嘴、舌头 ----
+    // 叫的时候张嘴；螺旋桨尾巴时开心地张着嘴喘气、吐出一点舌头；作揖时微微张嘴
+    const openAmount = Math.min(1, Math.max(pose.mouthOpen, propellerAmount * .75, begAmount * .3));
+    const panting = Math.sin(elapsedSeconds * 9) * .05 * propellerAmount;   // 喘气：下巴一张一合
+    this.jaw.rotation.x = openAmount * .5 + panting;
+    this.tongueTip.visible = propellerAmount > .03;
+    this.tongueTip.scale.set(1, Math.max(.001, propellerAmount), Math.max(.001, propellerAmount));
+    this.tongueTip.rotation.set(Math.sin(elapsedSeconds * 9 + .6) * .1 * propellerAmount, 0, Math.sin(elapsedSeconds * 4.5) * .08 * propellerAmount);
 
-    // ---- 卷尾巴：开心时左右猛摇 ----
-    this.tailBase.rotation.x = -(pose.tailLift - .6) * .25;
-    this.tailBase.rotation.z = Math.sin(elapsedSeconds * pose.tailSpeed * 2.5) * pose.tailSwing * .55;
+    // ---- 卷尾巴：开心时左右猛摇；螺旋桨尾巴时一圈一圈地转 ----
+    const spin = elapsedSeconds * 16;
+    this.tailBase.rotation.x = -(pose.tailLift - .6) * .25 + Math.cos(spin) * .45 * propellerAmount;
+    this.tailBase.rotation.z = Math.sin(elapsedSeconds * pose.tailSpeed * 2.5) * pose.tailSwing * .55 * (1 - propellerAmount)
+      + Math.sin(spin) * .7 * propellerAmount;
 
     this.sign.update(pose.holdSign, elapsedSeconds);
     this.shadow.material.opacity = (1 - pose.lifted) * (1 - pose.airborne * .6);

@@ -15,12 +15,16 @@ const GAP = 8;
 const LABEL_WIDTH = 90;
 const HEADER_HEIGHT = 26;
 
+interface SpecialMove {
+  title: string;
+  apply: (pose: CatPose) => void;
+}
+
 interface Species {
   name: string;
   create: () => PetModel;
-  /** 特有动作 */
-  special: (pose: CatPose) => void;
-  specialTitle: string;
+  /** 特有动作（预览里每 4 秒轮换一个） */
+  specials: SpecialMove[];
 }
 
 interface PoseColumn {
@@ -29,16 +33,28 @@ interface PoseColumn {
   yaw: number;
   isWalking?: boolean;
   isTurntable?: boolean;
+  /** 特有动作这一列：轮换播放 */
+  isSpecial?: boolean;
   setPose: (pose: CatPose, species: Species) => void;
 }
 
 const only = (pose: CatPose, name: (typeof POSE_NAMES)[number]) => { POSE_NAMES.forEach(item => { pose[item] = 0; }); pose[name] = 1; };
 
 const ALL_SPECIES: Species[] = [
-  { name: '🐈‍⬛ 煤球\n黑猫', create: () => new BlackCatModel(), specialTitle: '舔爪洗脸', special: pose => { only(pose, 'sit'); pose.groom = 1; pose.squint = .6; } },
-  { name: '🐹 团子\n仓鼠', create: () => new HamsterModel(), specialTitle: '鼓腮帮子', special: pose => { only(pose, 'sit'); pose.special = 1; pose.squint = .7; } },
-  { name: '🐕 小柴\n柴犬', create: () => new ShibaModel(), specialTitle: '歪头吐舌头', special: pose => { only(pose, 'sit'); pose.special = 1; pose.headRoll = .32; pose.squint = .8; pose.tailSwing = .9; pose.tailSpeed = 6; } },
-  { name: '🐟 墨墨\n金鱼', create: () => new GoldfishModel(), specialTitle: '吐泡泡', special: pose => { only(pose, 'sit'); pose.special = 1; } },
+  { name: '🐈‍⬛ 煤球\n黑猫', create: () => new BlackCatModel(), specials: [
+    { title: '舔爪洗脸', apply: pose => { only(pose, 'sit'); pose.groom = 1; pose.squint = .6; } },
+  ] },
+  { name: '🐹 团子\n仓鼠', create: () => new HamsterModel(), specials: [
+    { title: '鼓腮帮子', apply: pose => { only(pose, 'sit'); pose.special = 1; pose.squint = .7; } },
+  ] },
+  { name: '🐕 小柴\n柴犬', create: () => new ShibaModel(), specials: [
+    { title: '作揖拜拜', apply: pose => { only(pose, 'sit'); pose.special = 1; pose.squint = .9; pose.tailSwing = .9; pose.tailSpeed = 6; pose.earBack = .2; } },
+    { title: '赖地耍赖', apply: pose => { only(pose, 'lie'); pose.special2 = 1; pose.eyeOpen = .45; pose.earBack = .6; pose.tailLift = -.2; } },
+    { title: '螺旋桨尾巴', apply: pose => { only(pose, 'stand'); pose.special3 = 1; pose.squint = 1; pose.tailLift = 1.2; } },
+  ] },
+  { name: '🐟 墨墨\n金鱼', create: () => new GoldfishModel(), specials: [
+    { title: '吐泡泡', apply: pose => { only(pose, 'sit'); pose.special = 1; } },
+  ] },
 ];
 
 const onlyIndex = searchParams.get('only');
@@ -50,12 +66,13 @@ const COLUMNS: PoseColumn[] = [
   { title: '开心', background: 'blue', yaw: 0, setPose: pose => { only(pose, 'sit'); pose.squint = 1; pose.tailLift = 1.3; pose.headRoll = .2; pose.bounce = 1; pose.tailSwing = .8; pose.tailSpeed = 7; } },
   { title: '睡觉', background: 'dark', yaw: .7, setPose: pose => { only(pose, 'lie'); pose.eyeOpen = 0; pose.headPitch = .35; pose.tailLift = -.3; pose.tailWrap = 1; pose.breathRate = 1.3; } },
   { title: '举牌提醒', background: 'light', yaw: 0, setPose: pose => { only(pose, 'sit'); pose.holdSign = 1; pose.pawsOnLedge = .7; pose.earPerk = 1; pose.tailLift = .8; } },
-  { title: '特有动作', background: 'blue', yaw: .2, setPose: (pose, species) => species.special(pose) },
+  { title: '特有动作', background: 'blue', yaw: .2, isSpecial: true, setPose: (pose, species) => species.specials[0].apply(pose) },
   { title: '旋转一圈', background: 'light', yaw: 0, isTurntable: true, setPose: pose => { only(pose, 'sit'); pose.tailLift = .5; } },
 ];
 
 // ---- 页面上的格子（背景和文字），3D 画在上面盖着的一张大画布上 ----
 const grid = document.getElementById('grid')!;
+const specialCaptions = new Map<Species, HTMLElement>();
 grid.style.gridTemplateColumns = `${LABEL_WIDTH}px repeat(${COLUMNS.length}, ${CELL_SIZE}px)`;
 document.documentElement.style.setProperty('--cell-size', `${CELL_SIZE}px`);
 grid.appendChild(document.createElement('div'));
@@ -74,7 +91,15 @@ for (const species of SPECIES) {
   for (const column of COLUMNS) {
     const cell = document.createElement('div');
     cell.className = `cell ${column.background}`;
-    if (column.title === '特有动作') cell.title = species.specialTitle;
+    if (column.isSpecial) {
+      // 特有动作的名字写在格子底部（轮换时跟着换）
+      cell.style.position = 'relative';
+      const caption = document.createElement('div');
+      caption.className = 'special-caption';
+      caption.textContent = species.specials[0].title;
+      cell.appendChild(caption);
+      specialCaptions.set(species, caption);
+    }
     grid.appendChild(cell);
   }
 }
@@ -115,7 +140,7 @@ const cells = SPECIES.flatMap((species, row) => COLUMNS.map((column, columnIndex
   column.setPose(pose, species);
   model.setSignText('喝水！');
   return {
-    scene, model, pose, column,
+    scene, model, pose, column, species, specialIndex: 0,
     left: LABEL_WIDTH + GAP + columnIndex * (CELL_SIZE + GAP),
     top: HEADER_HEIGHT + GAP + row * (CELL_SIZE + GAP),
     walkPhase: 0,
@@ -129,7 +154,22 @@ function animate(now: number): void {
   const deltaSeconds = Math.min(.05, (now - lastTime) / 1000);
   lastTime = now;
   elapsedSeconds += deltaSeconds;
+  // 特有动作这一列：每 4 秒换下一个
+  // 网址参数 ?special=1 可以直接停在第 2 个特有动作（检查用）
+  const forcedSpecial = searchParams.get('special');
+  const specialRound = forcedSpecial === null ? Math.floor(elapsedSeconds / 4) : Number(forcedSpecial);
   for (const cell of cells) {
+    if (cell.column.isSpecial && cell.species.specials.length > 1) {
+      const index = specialRound % cell.species.specials.length;
+      if (index !== cell.specialIndex) {
+        cell.specialIndex = index;
+        const freshPose = createDefaultPose();
+        cell.species.specials[index].apply(freshPose);
+        Object.assign(cell.pose, freshPose);
+        const caption = specialCaptions.get(cell.species);
+        if (caption) caption.textContent = cell.species.specials[index].title;
+      }
+    }
     if (cell.column.isWalking) {
       cell.walkPhase += deltaSeconds * 8;
       cell.pose.walkAmount = 1;

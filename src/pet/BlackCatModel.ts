@@ -47,7 +47,10 @@ export function createDefaultPose() {
     rollAngle: 0,     // 打滚的角度（直接设置，不做平滑）
     cupVisible: 0,    // 身边是否放着小水杯
     cupPush: 0,       // 推杯子的进度 0~1（直接设置，不做平滑）
-    special: 0,       // 每种动物特有动作的程度：仓鼠鼓腮帮 / 柴犬吐舌头 / 金鱼吐泡泡（猫没用到）
+    // 每种动物自己的特有动作（0~1），具体是什么动作见 models/PetModel.ts 里的说明（猫没用到）
+    special: 0,
+    special2: 0,
+    special3: 0,
   };
 }
 export type CatPose = ReturnType<typeof createDefaultPose>;
