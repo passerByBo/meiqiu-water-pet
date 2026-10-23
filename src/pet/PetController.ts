@@ -16,6 +16,7 @@ import { isBusyCategory, isQuietCategory, isWatchingCategory, type ActivityCateg
 import { catConfig, lineKindOf, loadCatConfig, type RewardRule } from './catConfig';
 import { chooseDialogueGroup, type DialogueContext } from './dialogueSelector';
 import { DailyRoutine, type RoutineEvent } from './dailyRoutine';
+import { actionLibrary } from './actionSystem';
 import {
   backendApi, type AppSettings, type CursorPayload, type CustomReminderFiredPayload, type DesktopLayoutPayload, type MoodLevel,
   type ReminderFiredPayload, type RoamMode, type Statistics,
@@ -127,9 +128,12 @@ export class PetController {
   }
 
   async start(): Promise<void> {
-    await Promise.all([catVoice.loadManifest(), loadCatConfig()]);
+    await Promise.all([catVoice.loadManifest(), loadCatConfig(), actionLibrary.load()]);
+    console.info(`煤球的动作库：${actionLibrary.count} 个动作`);
     this.applySettings(await backendApi.getSettings());
-    this.applyMood((await backendApi.getCatMood()).level, false);
+    const mood = await backendApi.getCatMood();
+    this.brain.intimacy = mood.intimacy;
+    this.applyMood(mood.level, false);
     this.applyDesktopLayout(await backendApi.getDesktopLayout());
     this.placeCatAtStart();
 
@@ -221,6 +225,7 @@ export class PetController {
   private updateForegroundActivity(): void {
     const foreground = this.desktop.foregroundWindow;
     const category = foreground?.category ?? 'other';
+    this.brain.foregroundCategory = category;
     const isMeeting = isQuietCategory(category);
     catVoice.isQuietMode = isMeeting;
     this.brain.isLowProfile = isMeeting || this.desktop.hasFullscreenWindow;
@@ -254,6 +259,7 @@ export class PetController {
     void backendApi.onCursorMoved(cursor => this.handleCursor(cursor));
     void backendApi.onTypingChanged(isTyping => {
       this.isTyping = isTyping;
+      this.brain.isUserTyping = isTyping;
       this.lastTypingTime = performance.now();
     });
     void backendApi.onReminderFired(payload => this.handleWaterReminder(payload));
@@ -261,7 +267,10 @@ export class PetController {
     void backendApi.onUserAway(() => { this.isUserAway = true; this.brain.goToSleep(); });
     void backendApi.onUserBack(() => { this.isUserAway = false; this.brain.wakeUp(); });
     void backendApi.onSettingsChanged(settings => this.applySettings(settings));
-    void backendApi.onCatMoodChanged(mood => this.applyMood(mood.level));
+    void backendApi.onCatMoodChanged(mood => {
+      this.brain.intimacy = mood.intimacy;
+      this.applyMood(mood.level);
+    });
     void backendApi.onTrayAction(action => {
       if (action === 'record-drink') void this.recordDrink('tray');
       if (action === 'reset-pet') this.resetPet('托盘手动复位');
@@ -509,6 +518,7 @@ export class PetController {
       { id: 'petCat', icon: '🤚', label: '摸摸煤球', run: () => { this.brain.pet(); void backendApi.recordInteraction('pet'); } },
       { id: 'peekNow', icon: '👀', label: '去偷看你在干嘛', run: () => { if (!this.brain.tryStartPeek(true)) this.effects.say('那边没有好藏的地方…'); } },
       { id: 'zoomies', icon: '💨', label: '撒个欢', run: () => void this.brain.tryStartMischief('zoomies') },
+      { id: 'trick', icon: '🎲', label: '表演一个小动作', run: () => { if (!this.brain.performTrick()) this.effects.say('现在不想表演嘛…'); } },
       { type: 'separator' },
       roamSkill('roamFree', '🐾', '自由散步', 'free'),
       roamSkill('roamAnchored', '📌', '待在这里别动', 'anchored'),

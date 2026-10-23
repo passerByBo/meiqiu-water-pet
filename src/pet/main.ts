@@ -1,6 +1,19 @@
 // 猫咪窗口入口
 import { createApp } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import PetView from './PetView.vue';
+
+// 把提示、警告和错误也转发到程序日志（猫咪窗口没有可见的控制台，出问题时靠日志排查）
+const forwardToLog = (level: 'info' | 'warn' | 'error', parts: unknown[]) => {
+  const message = parts.map(part => (part instanceof Error ? `${part.message}\n${part.stack ?? ''}` : typeof part === 'string' ? part : JSON.stringify(part))).join(' ');
+  void invoke('frontend_log', { level, message }).catch(() => {});
+};
+for (const level of ['info', 'warn', 'error'] as const) {
+  const original = console[level].bind(console);
+  console[level] = (...parts: unknown[]) => { original(...parts); forwardToLog(level, parts); };
+}
+window.addEventListener('error', event => forwardToLog('error', [event.error ?? event.message]));
+window.addEventListener('unhandledrejection', event => forwardToLog('error', ['未处理的异步错误', event.reason]));
 
 createApp(PetView).mount('#app');
 

@@ -13,6 +13,19 @@ use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 
+/// 前端的提示、警告和错误（例如"煤球复位：来回抖动"）转发到程序日志里，方便排查问题。
+/// 只打印，不执行任何东西；内容截断到 500 字，防止刷屏
+#[tauri::command]
+fn frontend_log(level: String, message: String) {
+    let level = match level.as_str() {
+        "error" => "错误",
+        "warn" => "警告",
+        _ => "提示",
+    };
+    let message: String = message.chars().take(500).collect();
+    eprintln!("[前端{level}] {message}");
+}
+
 pub fn run() {
     tauri::Builder::default()
         // 防多开：重复启动时只把已有的猫叫出来
@@ -21,6 +34,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![
+            frontend_log,
             pet_window::get_desktop_layout,
             pet_window::move_pet_window,
             pet_window::set_click_through,

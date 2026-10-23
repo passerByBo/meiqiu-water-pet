@@ -1,11 +1,14 @@
-// 猫的"大脑"：决定去哪儿、做什么、什么姿势
-// 包含：日常行为、巡视（跳上窗口顶）、偷看、多种提醒方式、心情影响、小捣乱、逗猫棒、抱抱、作息、卡住后复位。
-// 各种行为的概率都在 cat-config.json 的 behavior / teaser / routine 里配置
+// 猫的"大脑"，分两层：
+//   动作层：平时做什么、对每件事怎么反应，统一交给动作系统（actionSystem.ts + cat-actions.json）按条件和权重挑选，
+//           再由这里的"动作执行器"一步步执行（摆姿势、说话、冒字、声音、转向、调用能力）
+//   能力层：动作配置里写不出来的复杂本事——走路寻路、跳跃、巡视窗口顶、偷看、各种提醒方式、捣乱、追鼠标……
+// 另外还有：心情影响、作息、逗猫棒、抱抱、被吓到、卡住后自动复位
 import {
   CALM_IDLE_MULTIPLIER, LIVELY_IDLE_MULTIPLIER, PEEK_DUCK_CURSOR_SPEED, RUN_SPEED, SNEAK_SPEED,
   STRIDE_LENGTH, WALK_SPEED, catPixels,
 } from './constants';
-import { catConfig, pickWeighted, type IdleAction, type RoutinePhase } from './catConfig';
+import { catConfig, type RoutinePhase } from './catConfig';
+import { actionLibrary, type ActionContext, type ActionDefinition, type ActionStep, type ActionTrigger, type CatPlace } from './actionSystem';
 import type { DesktopLayout, LocalWindow } from './DesktopLayout';
 import type { FreeSpaceMap } from './FreeSpaceMap';
 import type { PeekGeometry, PeekPlanner, PeekSpot } from './PeekPlanner';
@@ -140,6 +143,19 @@ export class CatBrain {
   isLowProfile = false;
   /** 一天里的阶段（作息），影响精神头 */
   routinePhase: RoutinePhase = 'working';
+  /** 亲密度（越高解锁越多亲昵动作） */
+  intimacy = 0;
+  /** 你是不是正在打字、正在用什么软件（动作条件会用到） */
+  isUserTyping = false;
+  foregroundCategory = 'other';
+  /** 你上次理它的时间（摸摸、抱抱、逗猫、拎起来、喝水） */
+  private lastInteractionTime = 0;
+
+  // ---- 动作执行器 ----
+  /** 正在执行的动作和执行到第几步；为 null 表示当前行为不是动作系统安排的 */
+  private actionRun: { definition: ActionDefinition; stepIndex: number; trigger: ActionTrigger; poseStep: ActionStep | null } | null = null;
+  /** 执行器自己在切换行为时为 true（别的代码切换行为会打断当前动作） */
+  private isRunnerChangingBehavior = false;
 
   // ---- 逗猫棒、抱抱 ----
   private teaserPouncesInRow = 0;
@@ -244,54 +260,213 @@ export class CatBrain {
   }
 
   // =====================================================================
-  // 日常行为
+  // 动作层：问动作系统"现在做什么 / 怎么反应"，再一步步执行
   // =====================================================================
+  /** 上一个动作做完了：想想接下来做什么 */
   chooseNextBehavior(): void {
-    if (this.roamMode === 'anchored') { this.idleInPlace(); return; }
-    if (this.surface) { this.chooseOnWindowBehavior(); return; }
+    // 站着的窗口不能站了（最大化了、变窄了）：先跳下来
+    const window = this.surfaceWindow;
+    if (this.surface && (!window || !this.isWindowTopUsable(window))) { this.jumpDown(); return; }
     // 自由模式下蹲在边缘时，一旦桌面有了空地就回去
-    if (this.roamMode === 'free' && this.isOnEdge && this.freeSpaceMap.freeCellCount > 0) { this.leaveEdge(); return; }
-
-    const behaviorConfig = catConfig.behavior;
-    if (Math.random() < this.mischiefChance() && this.tryStartMischief()) return;
-    // 活跃度 × 作息（午休没精神、快下班很兴奋……）
-    const routineFactor = catConfig.routine.phaseActivityFactor[this.routinePhase] ?? 1;
-    const activityFactor = (behaviorConfig.activityFactor[this.activityLevel] ?? 1) * routineFactor;
-    // 全屏 / 边缘模式时更低调：更多时间躲起来只露出脑袋
-    const peekChances = behaviorConfig.peekChance;
-    const peekChance = (this.desktop.hasFullscreenWindow ? peekChances.fullscreen : this.isOnEdge ? peekChances.onEdge : peekChances.normal) * activityFactor;
-    if (Math.random() < peekChance && this.tryStartPeek()) return;
-    // 巡视：跳到窗口顶上看看你在干嘛
-    const patrolChance = this.roamMode === 'free' && !this.isLowProfile ? behaviorConfig.patrolChance * activityFactor : 0;
-    if (Math.random() < patrolChance && this.tryJumpOntoWindow()) return;
-
-    const wanderChance = ((behaviorConfig.wanderChance[this.activityLevel] ?? .5) + (behaviorConfig.wanderMoodBonus[this.moodLevel] ?? 0)) * routineFactor;
-    if (Math.random() < wanderChance) this.startWander();
-    else this.idleInPlace();
+    if (this.roamMode === 'free' && this.isOnEdge && !this.surface && this.freeSpaceMap.freeCellCount > 0) { this.leaveEdge(); return; }
+    if (!this.performAction('idle')) this.setBehavior('sit', this.idleDuration(3, 5));
   }
 
-  idleInPlace(): void {
-    const behaviorConfig = catConfig.behavior;
-    // 心情不好：经常背对着你生闷气
-    if (Math.random() < (behaviorConfig.sulkChance[this.moodLevel] ?? 0)) { this.setBehavior('sulk', this.idleDuration(4, 8)); return; }
-    // 心情好：偶尔打个滚
-    if (this.moodLevel === 'happy' && Math.random() < behaviorConfig.happyRollChance) { this.startRoll(); return; }
-    // 发呆的小动作：基础权重 × 当前作息阶段的倍数（早上爱打哈欠、快下班会开心地蹦）
-    const multipliers = catConfig.routine.phaseIdleMultipliers[this.routinePhase] ?? {};
-    const weights: Partial<Record<IdleAction, number>> = {};
-    for (const [action, weight] of Object.entries(behaviorConfig.idleWeights) as [IdleAction, number][]) {
-      weights[action] = weight * (multipliers[action] ?? 1);
+  /** 猫现在在哪儿 */
+  get place(): CatPlace {
+    if (this.roamMode === 'anchored') return 'anchored';
+    if (this.surface) return 'window';
+    return this.isOnEdge ? 'edge' : 'floor';
+  }
+
+  /** 挑选动作时的"现场情况" */
+  private buildActionContext(trigger: ActionTrigger): ActionContext {
+    const head = this.headPosition;
+    return {
+      trigger,
+      place: this.place,
+      mood: this.moodLevel,
+      intimacy: this.intimacy,
+      routinePhase: this.routinePhase,
+      activity: this.foregroundCategory,
+      activityLevel: this.activityLevel,
+      mischiefLevel: this.mischiefLevel,
+      roamMode: this.roamMode,
+      isFullscreen: this.desktop.hasFullscreenWindow,
+      isLowProfile: this.isLowProfile,
+      isTyping: this.isUserTyping,
+      isCursorNearby: this.cursor.x > -1000 && Math.hypot(this.cursor.x - head.x, this.cursor.y - head.y) < 400,
+      behavior: this.behavior,
+      quietMinutes: (this.elapsedSeconds - this.lastInteractionTime) / 60,
+      now: new Date(),
+    };
+  }
+
+  /**
+   * 按触发时机挑一个动作来做。做不成的（例如想偷看却找不到藏身的地方）换一个，最多试 4 次。
+   * 返回做了哪个动作；一个都做不成返回 null（调用的地方会用保底动作）
+   */
+  performAction(trigger: ActionTrigger, ignoreCooldown = false): ActionDefinition | null {
+    const triedIds = new Set<string>();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const definition = actionLibrary.choose(this.buildActionContext(trigger), triedIds, ignoreCooldown);
+      if (!definition) return null;
+      triedIds.add(definition.id);
+      if (this.startAction(definition, trigger)) {
+        actionLibrary.markUsed(definition.id);
+        if (import.meta.env.DEV) console.info(`动作：${definition.name}（${definition.id}，${trigger}，在${this.place}）`);
+        return definition;
+      }
     }
-    switch (pickWeighted(weights) ?? 'sit') {
-      case 'sit': this.setBehavior('sit', this.idleDuration(3, 6)); break;
-      case 'stand': this.setBehavior('stand', this.idleDuration(2, 4)); break;
-      case 'groom': this.setBehavior('groom', this.idleDuration(3, 5)); break;
-      case 'scratch': this.setBehavior('scratch', 1.6); break;
-      case 'yawn': this.setBehavior('yawn', 1.8); break;
-      case 'stretch': this.setBehavior('stretch', 2.4); break;
-      case 'rest': this.setBehavior('rest', this.idleDuration(5, 9)); break;
-      case 'happy': this.setBehavior('happy', 1.6); this.effects.float(pickRandom(['♪', '✨', '♡']), this.headPosition); break;
+    return null;
+  }
+
+  private startAction(definition: ActionDefinition, trigger: ActionTrigger): boolean {
+    this.actionRun = { definition, stepIndex: 0, trigger, poseStep: null };
+    return this.advanceAction();
+  }
+
+  /**
+   * 执行动作的下一步：
+   *   说话、冒字、声音、转向这些"瞬间完成"的立刻做，然后接着下一步；
+   *   摆姿势要保持一段时间，时间到了（handleBehaviorTimeout）再接着执行；
+   *   调用能力（散步、偷看、捣乱……）后，动作就交给能力了，到此结束。
+   * 返回 false 表示动作已经结束（或者能力做不成）
+   */
+  private advanceAction(): boolean {
+    const run = this.actionRun;
+    if (!run) return false;
+    while (run.stepIndex < run.definition.steps.length) {
+      const step = run.definition.steps[run.stepIndex++];
+      if (step.run) {
+        this.actionRun = null;
+        const isStarted = this.runAbility(step.run);
+        if (isStarted) this.runInstantStepParts(step, run);
+        return isStarted;
+      }
+      this.runInstantStepParts(step, run);
+      if (step.pose) {
+        const seconds = Array.isArray(step.seconds) ? randomBetween(step.seconds[0], step.seconds[1]) : step.seconds ?? 2;
+        // 平时的动作受活跃度影响：安静的猫发呆久一点，活泼的猫短一点
+        const duration = run.trigger === 'idle' ? this.idleDuration(seconds, seconds) : seconds;
+        this.isRunnerChangingBehavior = true;
+        this.setBehavior(step.pose as Behavior, duration);
+        this.isRunnerChangingBehavior = false;
+        run.poseStep = step;
+        if (step.face) this.applyFace(step.face); // 放在 setBehavior 后面，因为坐下时会随机转个方向
+        return true;
+      }
     }
+    this.actionRun = null;
+    return false;
+  }
+
+  /** 一步里"瞬间完成"的部分：说话、冒字、声音、转向 */
+  private runInstantStepParts(step: ActionStep, run: { definition: ActionDefinition; trigger: ActionTrigger }): void {
+    const pickOne = (value: string | string[] | undefined) => (Array.isArray(value) ? pickRandom(value) : value);
+    const text = pickOne(step.text);
+    if (step.say) {
+      this.effects.sayLine(step.say, { fallbackText: text });
+    } else if (text) {
+      // 只有文字的台词：平时的动作算闲聊（受"话多程度"限制），对你操作的反应算互动回应
+      const lineKey = run.trigger === 'idle' ? `action-${run.definition.id}` : `reaction-${run.definition.id}`;
+      this.effects.sayLine(lineKey, { fallbackText: text });
+    }
+    const floatText = pickOne(step.float);
+    if (floatText) this.effects.float(floatText, this.headPosition);
+    if (step.burst) this.effects.burst(step.burst, step.burstCount ?? 3);
+    if (step.sound) this.playStepSound(step.sound);
+    if (step.face && !step.pose) this.applyFace(step.face);
+  }
+
+  private playStepSound(sound: string): void {
+    if (sound === 'purr') this.effects.purr();
+    else if (sound === 'knock' || sound === 'crash' || sound === 'boing') this.effects.playSound(sound);
+    else if (sound.startsWith('meow:')) this.effects.meow(sound.slice(5) as MeowKind);
+  }
+
+  private applyFace(face: NonNullable<ActionStep['face']>): void {
+    if (face === 'user') this.targetYaw = 0;
+    else if (face === 'away') this.targetYaw = Math.PI + randomBetween(-.4, .4);
+    else if (face === 'random') this.targetYaw = randomBetween(-1.2, 1.2);
+    else if (this.cursor.x > -1000) this.targetYaw = Math.atan2(this.cursor.x - this.position.x, this.cursor.y - this.position.y);
+  }
+
+  /**
+   * 能力：动作配置里写不出来的复杂本事，配置里用 { "run": "名字" } 调用。返回 false 表示现在做不了
+   *   wander 溜达 / peek 偷看 / patrol 跳上窗口巡视 / roll 打滚 / sleep 打个盹 / goEdge 去屏幕边上 / flee 跑开
+   *   approachCursor 走到鼠标旁边 / dodgeHop 往旁边跳开 / pounceCursor 扑鼠标（逗猫棒）
+   *   walkOnWindow 沿窗口顶边溜达 / observe 低头看窗口里 / hopToOtherWindow 跳到别的窗口 / jumpDown 跳下来
+   *   mischief:zoomies 满屏乱跑 / mischief:pounce 扑鼠标 / mischief:occupyWindow 霸占窗口 / mischief:pushCup 推杯子 / mischief:follow 跟屁虫
+   */
+  private runAbility(name: string): boolean {
+    if (name.startsWith('mischief:')) return this.tryStartMischief(name.slice(9) as MischiefKind);
+    const window = this.surfaceWindow;
+    switch (name) {
+      case 'wander': this.startWander(); return true;
+      case 'peek': return this.tryStartPeek();
+      case 'patrol': return this.roamMode === 'free' && !this.isLowProfile && this.tryJumpOntoWindow();
+      case 'roll': this.startRoll(); return true;
+      case 'sleep': this.setBehavior('sleep', randomBetween(40, 90)); return true;
+      case 'goEdge': if (this.roamMode !== 'free' || this.isOnEdge) return false; this.goEdge(); return true;
+      case 'flee':
+        if (this.roamMode === 'anchored') { this.setBehavior('startled', .9); return true; }
+        this.startWander(this.cursor.x > -1000 ? this.cursor : null, RUN_SPEED, 'flee');
+        return true;
+      case 'approachCursor': {
+        if (this.cursor.x < -1000 || this.roamMode !== 'free' || this.surface || this.isOnEdge) return false;
+        const path = this.freeSpaceMap.planToward(this.position, this.cursor, catPixels(160));
+        if (!path?.length) return false;
+        this.moveAlong(path, WALK_SPEED * 1.1, 'wander', () => {
+          this.setBehavior('sit', 3);
+          this.applyFace('cursor');
+          this.effects.meow('call');
+        });
+        return true;
+      }
+      case 'dodgeHop': {
+        const side = Math.random() < .5 ? -1 : 1;
+        this.hopTo({ x: this.position.x + side * catPixels(110), y: this.position.y }, () => this.setBehavior('dodge', 2.5), this.surface);
+        return true;
+      }
+      case 'pounceCursor': {
+        if (this.cursor.x < -1000) return false;
+        this.lastTeaserPounceTime = this.elapsedSeconds;
+        this.teaserPouncesInRow++;
+        this.isTeaserPounce = true;
+        this.zoomiesLeft = 0;
+        this.followSecondsLeft = 0;
+        this.setBehavior('pounceWiggle', .55);
+        this.targetYaw = Math.atan2(this.cursor.x - this.position.x, this.cursor.y - this.position.y);
+        return true;
+      }
+      case 'walkOnWindow': {
+        if (!window) return false;
+        const targetX = randomBetween(window.rect.left + 60, window.rect.right - 60);
+        this.moveAlong([{ x: targetX, y: window.rect.top }], WALK_SPEED * randomBetween(.8, 1.2), 'wander', () => this.setBehavior('sit', this.idleDuration(2, 4)));
+        return true;
+      }
+      case 'observe': if (!window) return false; this.startObserve(); return true;
+      case 'hopToOtherWindow':
+        if (!window) return false;
+        if (!this.tryJumpOntoWindow(undefined, undefined, window.id)) this.jumpDown();
+        return true;
+      case 'jumpDown': if (!this.surface) return false; this.jumpDown(); return true;
+      default:
+        console.warn(`动作配置里写了不认识的能力：${name}`);
+        return false;
+    }
+  }
+
+  /** 你理了它一下（摸摸、抱抱、逗猫、拎起来、喝水）：用来判断"多久没理它了" */
+  private noteInteraction(): void {
+    this.lastInteractionTime = this.elapsedSeconds;
+  }
+
+  /** 右键菜单"表演一个"：从表演类动作里挑一个，不管冷却 */
+  performTrick(): boolean {
+    if (this.reminder || this.peek || this.jump || this.behavior === 'lifted') return false;
+    return !!this.performAction('trick', true);
   }
 
   startWander(avoidPoint: Point | null = null, speed = WALK_SPEED * randomBetween(.8, 1.25), behavior: Behavior = 'wander'): void {
@@ -399,7 +574,27 @@ export class CatBrain {
     const workArea = this.desktop.workArea;
     return !window.isMaximized && !window.isFullscreen &&
       window.rect.top >= workArea.top + catPixels(WINDOW_TOP_CLEARANCE) &&
-      window.rect.right - window.rect.left >= MIN_WINDOW_WIDTH_FOR_STANDING;
+      window.rect.right - window.rect.left >= MIN_WINDOW_WIDTH_FOR_STANDING &&
+      !this.isWindowTopCovered(window);
+  }
+
+  /**
+   * 窗口顶边是不是被上层的窗口挡住了大半（例如被全屏视频、别的窗口盖住）。
+   * 被挡住的窗口顶上不能站——不然猫会"浮"在挡住它的窗口上面
+   */
+  private isWindowTopCovered(window: LocalWindow): boolean {
+    const windowIndex = this.desktop.visibleWindows.findIndex(item => item.id === window.id);
+    if (windowIndex <= 0) return false;
+    const width = window.rect.right - window.rect.left;
+    // 窗口顶边上方猫站的那一条区域
+    const strip = { left: window.rect.left, right: window.rect.right, top: window.rect.top - catPixels(WINDOW_TOP_CLEARANCE) * .5, bottom: window.rect.top + 4 };
+    let coveredWidth = 0;
+    for (const above of this.desktop.visibleWindows.slice(0, windowIndex)) {
+      const overlapsVertically = above.rect.top < strip.bottom && above.rect.bottom > strip.top;
+      if (!overlapsVertically) continue;
+      coveredWidth += Math.max(0, Math.min(above.rect.right, strip.right) - Math.max(above.rect.left, strip.left));
+    }
+    return coveredWidth > width * .5;
   }
 
   /** 选一个窗口跳上去（优先你正在用的窗口） */
@@ -413,24 +608,6 @@ export class CatBrain {
       window.rect.left + 70, window.rect.right - 70);
     this.hopTo({ x, y: window.rect.top }, onLanded ?? (() => this.startObserve()), { windowId: window.id, lastAnchor: { x: window.rect.left, y: window.rect.top } });
     return true;
-  }
-
-  private chooseOnWindowBehavior(): void {
-    const window = this.surfaceWindow;
-    if (!window || !this.isWindowTopUsable(window)) { this.jumpDown(); return; }
-    if (Math.random() < this.mischiefChance() && this.tryStartMischief()) return;
-    switch (pickWeighted(catConfig.behavior.onWindowWeights) ?? 'idle') {
-      case 'walk': {
-        // 沿着窗口顶边溜达
-        const targetX = randomBetween(window.rect.left + 60, window.rect.right - 60);
-        this.moveAlong([{ x: targetX, y: window.rect.top }], WALK_SPEED * randomBetween(.8, 1.2), 'wander', () => this.setBehavior('sit', this.idleDuration(2, 4)));
-        break;
-      }
-      case 'observe': this.startObserve(); break;
-      case 'hopToOther': if (!this.tryJumpOntoWindow(undefined, undefined, window.id)) this.jumpDown(); break;
-      case 'idle': this.idleInPlace(); break;
-      case 'jumpDown': this.jumpDown(); break;
-    }
   }
 
   /** 坐在窗口顶上低头看窗口里的内容，然后根据你在做什么说一句话 */
@@ -476,19 +653,10 @@ export class CatBrain {
   // =====================================================================
   // 小捣乱
   // =====================================================================
-  private mischiefChance(): number {
-    if (this.isLowProfile || this.mischiefLevel === 'off' || this.roamMode !== 'free' || this.reminder) return 0;
-    if (this.routinePhase === 'lunch') return 0; // 午休不捣乱
-    const behaviorConfig = catConfig.behavior;
-    const base = this.mischiefLevel === 'often' ? behaviorConfig.mischiefChance.often : behaviorConfig.mischiefChance.sometimes;
-    return base * (behaviorConfig.mischiefMoodFactor[this.moodLevel] ?? 1);
-  }
-
-  tryStartMischief(requestedKind?: MischiefKind): boolean {
-    const kind = requestedKind ?? (pickWeighted(catConfig.behavior.mischiefKinds) as MischiefKind | null);
+  /** 开始一段捣乱（什么时候捣乱、捣哪种乱，由动作配置决定） */
+  tryStartMischief(kind: MischiefKind): boolean {
+    if (this.reminder) return false;
     switch (kind) {
-      case null:
-        return false;
       case 'zoomies':
         this.effects.announceMischief('zoomies');
         this.surface = null;
@@ -775,18 +943,18 @@ export class CatBrain {
     this.pendingPounceArrive = null;
   }
 
-  /** 提醒没人理：坐着委屈一会儿 */
+  /** 提醒没人理：委屈一会儿（怎么委屈由动作配置决定） */
   reminderIgnored(): void {
     this.endReminder();
-    if (this.behavior === 'remindWaiting') this.setBehavior('sulk', 4);
+    if (this.behavior !== 'remindWaiting') return;
+    if (!this.performAction('reminderIgnored')) this.setBehavior('sulk', 4);
   }
 
   /** 定时提醒点了"做完啦"：开心一下 */
   customReminderDone(): void {
     this.endReminder();
-    this.setBehavior('happy', 2.4);
-    this.effects.burst('✅', 2);
     this.effects.sayLine('custom-done', { isImportant: true });
+    if (!this.performAction('customDone')) { this.setBehavior('happy', 2.4); this.effects.burst('✅', 2); }
   }
 
   /** 定时提醒点了"等一下嘛"：乖乖等着 */
@@ -810,27 +978,24 @@ export class CatBrain {
   /** 人回到电脑前：醒来伸个懒腰，打个招呼 */
   wakeUp(): void {
     if (this.behavior !== 'sleep') return;
-    this.setBehavior('stretch', 2.4);
     this.effects.sayLine('welcome-back-01', { isImportant: true });
+    if (!this.performAction('wakeUp')) this.setBehavior('stretch', 2.4);
   }
 
-  /** 喝了一杯：心情好就打个滚，否则开心地跳一跳 */
+  /** 喝了一杯 / 达标：开心的反应（打滚、蹦跳、撒花……由动作配置决定） */
   drinkRecorded(isGoalReached: boolean): void {
     this.endReminder();
+    this.noteInteraction();
     if (this.peek) { this.effects.burst('💧', 2); return; }
-    if (isGoalReached || this.moodLevel === 'happy') {
-      this.startRoll();
-      this.effects.burst(isGoalReached ? '🎉' : '💧', 3);
-    } else {
-      this.setBehavior('happy', 2.8);
-      this.effects.burst('💧', 3);
-    }
+    if (this.performAction(isGoalReached ? 'goalReached' : 'drink')) return;
+    this.setBehavior('happy', 2.8);
+    this.effects.burst(isGoalReached ? '🎉' : '💧', 3);
   }
 
   snooze(): void {
     this.endReminder();
-    this.setBehavior('sulk', 2.8);
     this.effects.sayLine('snooze', { isImportant: true });
+    if (!this.performAction('snooze')) this.setBehavior('sulk', 2.8);
   }
 
   /** 摸摸：心情好就呼噜；发脾气时会躲开 */
@@ -850,17 +1015,12 @@ export class CatBrain {
       return;
     }
     if (this.behavior === 'remindWaiting') return;
-    if (Math.random() < (catConfig.behavior.dodgePetChance[this.moodLevel] ?? 0)) {
-      // 发脾气：扭头躲开，往旁边跳一小步
-      this.effects.sayLine('mood-dodge', { isImportant: true, fallbackText: '哼！现在不想理你' });
-      const side = Math.random() < .5 ? -1 : 1;
-      this.hopTo({ x: this.position.x + side * 90, y: this.position.y }, () => this.setBehavior('dodge', 2.5), this.surface);
-      return;
-    }
+    this.noteInteraction();
+    // 怎么反应由动作配置决定：呼噜、蹭蹭、翻肚皮、心情不好时躲开……
+    if (this.performAction('pet')) return;
     this.setBehavior('petted', 2.4);
     this.effects.burst('❤', 2);
-    this.effects.purr(); // 被摸只呼噜，不说话
-    this.effects.say(pickRandom(['喵呜～再摸一下 🥰', '呼噜呼噜…', '就摸一下下哦～']));
+    this.effects.purr();
   }
 
   // =====================================================================
@@ -873,17 +1033,12 @@ export class CatBrain {
     if (!CALM_BEHAVIORS.has(this.behavior) && this.behavior !== 'happy' && this.behavior !== 'swat') return false;
     if (this.elapsedSeconds < this.teaserRestUntil) return false;
     if (this.elapsedSeconds - this.lastTeaserPounceTime < teaser.cooldownSeconds) return false;
-    if (this.moodLevel === 'angry' && Math.random() < .6) return false; // 发脾气时懒得理你
     // 隔了很久才再逗它：重新计"连续扑了几次"
     if (this.elapsedSeconds - this.lastTeaserPounceTime > 15) this.teaserPouncesInRow = 0;
-    this.lastTeaserPounceTime = this.elapsedSeconds;
-    this.teaserPouncesInRow++;
-    this.zoomiesLeft = 0;
-    this.followSecondsLeft = 0;
-    this.isTeaserPounce = true;
-    this.setBehavior('pounceWiggle', .55);
-    this.targetYaw = Math.atan2(this.cursor.x - this.position.x, this.cursor.y - this.position.y);
-    return true;
+    this.noteInteraction();
+    this.isTeaserPounce = false;
+    // 扑过去、盯着看、懒得理你……由动作配置决定；只有真的扑了才算陪它玩
+    return !!this.performAction('teaser') && this.isTeaserPounce;
   }
 
   /** 扑到了：拍一下；连扑好几次就玩累了，趴下休息 */
@@ -908,19 +1063,16 @@ export class CatBrain {
   /** 开始抱抱；心情很差时会挣脱。返回 true 表示抱住了 */
   startHug(): boolean {
     if (this.reminder || this.peek || this.jump || this.behavior === 'lifted') return false;
-    if (Math.random() < (catConfig.behavior.dodgePetChance[this.moodLevel] ?? 0)) {
-      this.effects.sayLine('mood-dodge', { isImportant: true, fallbackText: '哼！现在不想理你' });
-      this.setBehavior('dodge', 2.5);
-      return false;
-    }
     this.zoomiesLeft = 0;
     this.followSecondsLeft = 0;
+    this.lastPettedTime = this.elapsedSeconds;
+    this.noteInteraction();
+    // 乖乖被抱、挣脱跑开……由动作配置决定（rejectsHold 的动作表示不让抱）
+    const definition = this.performAction('hug');
+    if (definition) return !definition.rejectsHold && this.behavior === 'hugged';
     this.setBehavior('hugged', 30); // 最多抱 30 秒（万一没收到松开的消息，也不会一直卡在抱抱里）
     this.targetYaw = 0;
-    this.lastPettedTime = this.elapsedSeconds;
     this.effects.purr();
-    this.effects.burst('❤', 3);
-    this.effects.sayLine('hug-start', { fallbackText: '呼噜呼噜…抱抱好舒服' });
     return true;
   }
 
@@ -928,8 +1080,7 @@ export class CatBrain {
   endHug(): void {
     if (this.behavior !== 'hugged') return;
     this.lastPettedTime = this.elapsedSeconds;
-    this.effects.sayLine('hug-end', { fallbackText: '还要抱抱～' });
-    if (Math.random() < .5) this.startRoll(); else this.setBehavior('happy', 2);
+    if (!this.performAction('hugEnd')) this.setBehavior('happy', 2);
   }
 
   // =====================================================================
@@ -980,7 +1131,7 @@ export class CatBrain {
   }
 
   private checkScare(): void {
-    const scare = catConfig.behavior.scare;
+    const scare = catConfig.scare;
     if (!this.isScareEnabled || !SCARABLE_BEHAVIORS.has(this.behavior) || this.reminder) return;
     if (this.elapsedSeconds - this.lastPettedTime < 3 || this.elapsedSeconds - this.lastScaredTime < scare.cooldownSeconds) return;
     if (this.recentCursorSpeed < scare.cursorSpeed) return;
@@ -989,12 +1140,13 @@ export class CatBrain {
     const bodyCenter = { x: this.position.x, y: this.position.y - catPixels(50) };
     if (!this.didCursorSweepNear(bodyCenter, catPixels(scare.radius))) return;
     this.lastScaredTime = this.elapsedSeconds;
+    // 跑开、从窗口上跳下来、原地吓一跳……由动作配置按位置和状态决定
+    if (this.performAction('scare')) return;
     this.effects.float('❗', this.headPosition);
     this.effects.meow('scared');
-    this.effects.sayLine('scared', { fallbackText: '哇！吓死本喵了！' });
-    if (this.surface) { this.jumpDown(); return; }                         // 在窗口上：吓得跳下去
-    if (this.behavior === 'sleep' || this.roamMode === 'anchored') { this.setBehavior('startled', .9); return; }
-    this.startWander(this.cursor, RUN_SPEED, 'flee');                        // 往反方向跑开
+    if (this.surface) this.jumpDown();
+    else if (this.behavior === 'sleep' || this.roamMode === 'anchored') this.setBehavior('startled', .9);
+    else this.startWander(this.cursor, RUN_SPEED, 'flee');
   }
 
   // =====================================================================
@@ -1028,6 +1180,8 @@ export class CatBrain {
   // 容错：卡住、位置算错时自动复位
   // =====================================================================
   private noteBehaviorChange(): void {
+    // 不是执行器自己切的行为：说明别的事情（被摸、被拎、提醒……）接管了，当前动作作废
+    if (!this.isRunnerChangingBehavior) this.actionRun = null;
     const now = this.elapsedSeconds;
     this.behaviorChangeTimes.push(now);
     while (this.behaviorChangeTimes.length && now - this.behaviorChangeTimes[0] > BEHAVIOR_CHURN_WINDOW_SECONDS) this.behaviorChangeTimes.shift();
@@ -1100,6 +1254,7 @@ export class CatBrain {
   }
 
   liftUp(): void {
+    this.noteInteraction();
     this.peek = null;
     this.surface = null;
     this.jump = null;
@@ -1148,6 +1303,10 @@ export class CatBrain {
   // =====================================================================
   /** 定时行为结束后接下来做什么 */
   private handleBehaviorTimeout(): void {
+    if (this.actionRun) {
+      if (!this.advanceAction()) this.chooseNextBehavior(); // 动作做完了：想想接下来做什么
+      return;
+    }
     switch (this.behavior) {
       case 'landing': {
         const callback = this.landingCallback;
@@ -1250,6 +1409,12 @@ export class CatBrain {
       }
     }
 
+    // 动作配置里的原地转圈（追尾巴）
+    const spinSpeed = this.actionRun?.poseStep?.spin;
+    if (spinSpeed && !this.path.length) {
+      this.yaw += spinSpeed * deltaSeconds;
+      this.targetYaw = this.yaw;
+    }
     const turnRate = MOVING_BEHAVIORS.has(this.behavior) || this.behavior === 'jumpPrep' ? 7 : 3.5;
     this.yaw = dampAngle(this.yaw, this.targetYaw, turnRate, deltaSeconds);
   }
@@ -1510,6 +1675,18 @@ export class CatBrain {
       pose.pupilX = clamp(relativeYaw * .8, -1, 1);
       pose.pupilY = clamp(-deltaY / 200, -1, 1);
       if (distanceToTarget < 120 && CALM_BEHAVIORS.has(behavior)) pose.earPerk = 1;
+    }
+
+    // 动作配置里对这个姿势的微调（tweak）和来回摆动（animate），放在最后，优先级最高
+    const poseStep = this.actionRun?.poseStep;
+    if (poseStep) {
+      const poseValues = pose as Record<string, number>;
+      for (const [key, value] of Object.entries(poseStep.tweak ?? {})) {
+        if (key in poseValues && Number.isFinite(value)) poseValues[key] = value as number;
+      }
+      for (const [key, wave] of Object.entries(poseStep.animate ?? {})) {
+        if (key in poseValues && wave) poseValues[key] += wave.amplitude * Math.sin(this.behaviorElapsed * wave.speed);
+      }
     }
     return pose;
   }
