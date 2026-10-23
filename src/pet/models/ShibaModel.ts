@@ -1,7 +1,7 @@
 // 3D 柴犬"小柴"（参考 demo/柴犬.jpeg）：赤褐色的背、"里白"（嘴巴、脸颊、胸口、肚子、四肢内侧是奶白色）、
 // 奶白色的"豆豆眉"、立起来的三角耳、黑鼻头、咧嘴微笑、白袜子、卷在背上的卷尾巴、蓝色项圈。
 // 骨架和猫一样（四条腿 + 脖子 + 头），腿更长一点，嘴巴往前突出。
-// 特有动作 special：咧嘴笑着吐舌头
+// 特有动作 special：张开嘴、吐出半截舌头（另外半截在嘴里），一边喘气一边晃
 import * as THREE from 'three';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose, POSE_NAMES } from '../BlackCatModel';
@@ -49,40 +49,6 @@ const drawShibaSmile = (context: CanvasRenderingContext2D, size: number) => {
   context.stroke();
 };
 
-/** 张大嘴笑（吐舌头时）：深棕黑色的 D 形大嘴，嘴里下半部分能看到粉红的舌头（舌头伸出嘴外的部分是立体的） */
-const drawShibaOpenSmile = (context: CanvasRenderingContext2D, size: number) => {
-  const outline = '#2a1c16';
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-  // 鼻子下面的竖线（人中）
-  context.strokeStyle = outline;
-  context.lineWidth = size * .05;
-  context.beginPath();
-  context.moveTo(size * .5, size * .08);
-  context.lineTo(size * .5, size * .24);
-  context.stroke();
-  // 张大的嘴：上边是 w 形，下边是一道又圆又深的弧
-  const mouth = new Path2D();
-  mouth.moveTo(size * .14, size * .22);
-  mouth.quadraticCurveTo(size * .32, size * .4, size * .5, size * .24);
-  mouth.quadraticCurveTo(size * .68, size * .4, size * .86, size * .22);
-  mouth.quadraticCurveTo(size * .82, size * .74, size * .5, size * .74);
-  mouth.quadraticCurveTo(size * .18, size * .74, size * .14, size * .22);
-  context.fillStyle = '#2b1a17';
-  context.fill(mouth);
-  // 嘴里的舌头（下半部分）
-  context.save();
-  context.clip(mouth);
-  context.fillStyle = '#e8546b';
-  context.beginPath();
-  context.ellipse(size * .5, size * .74, size * .26, size * .2, 0, 0, Math.PI * 2);
-  context.fill();
-  context.restore();
-  context.strokeStyle = outline;
-  context.lineWidth = size * .05;
-  context.stroke(mouth);
-};
-
 interface Leg {
   upper: THREE.Group;
   knee: THREE.Group;
@@ -99,10 +65,10 @@ export class ShibaModel implements PetModel {
   private readonly head = new THREE.Group();
   private readonly ears: { group: THREE.Group; side: number }[] = [];
   private readonly eyes: PetEye[] = [];
-  private readonly closedMouthMaterial: THREE.MeshBasicMaterial;
-  private readonly openMouthMaterial: THREE.MeshBasicMaterial;
-  /** 立体的舌头（吐舌头时从嘴里垂出来） */
-  private readonly tongue = new THREE.Group();
+  /** 下巴（下颌）：绕后端转动，张嘴时往下张开；舌头长在它上面 */
+  private readonly jaw = new THREE.Group();
+  /** 伸出嘴外、垂在下巴前面的那半截舌头（吐舌头时才伸出来） */
+  private readonly tongueTip = new THREE.Group();
   private readonly blushMaterial: THREE.MeshBasicMaterial;
   private readonly legs: Record<'frontLeft' | 'frontRight' | 'backLeft' | 'backRight', Leg>;
   private readonly tailBase = new THREE.Group();
@@ -157,28 +123,33 @@ export class ShibaModel implements PetModel {
     this.head.add(builder.ellipsoid(fur, .4, .35, .37));
     this.head.add(builder.ellipsoid(cream, .34, .19, .3, 0, -.13, .08));     // 白色的下半张脸
     for (const side of [-1, 1]) this.head.add(builder.ellipsoid(cream, .15, .12, .13, side * .24, -.1, .15)); // 毛茸茸的白脸颊
-    this.head.add(builder.ellipsoid(cream, .17, .12, .16, 0, -.1, .3));      // 往前突出的嘴筒子
-    // 黑鼻头：圆圆的、往上挪一点（和嘴巴之间留出一小段人中），上面有一个小白点高光
-    this.head.add(builder.ellipsoid(builder.toon(COLORS.nose, .35, 0xffffff), .075, .052, .048, 0, -.015, .435));
-    this.head.add(builder.sticker(builder.solid(0xffffff), .022, .013, -.018, .012, .482));
-    // 嘴巴：闭嘴笑 和 张嘴吐舌头 两张贴纸，按张嘴程度交叉淡入淡出（贴纸贴在嘴筒子表面，稍微朝下倾斜）
-    this.closedMouthMaterial = builder.decal(createCanvasTexture(drawShibaSmile));
-    this.openMouthMaterial = builder.decal(createCanvasTexture(drawShibaOpenSmile));
-    // 两张嘴巴贴纸都用贴合嘴筒子弧面的弯曲贴纸（平面贴纸边缘会陷进嘴筒子里看不见），中心在嘴筒子正前方偏下
-    const muzzleCenter = new THREE.Vector3(0, -.1, .3);
-    const muzzleRadii = new THREE.Vector3(.17, .12, .16);
-    for (const material of [this.closedMouthMaterial, this.openMouthMaterial]) {
-      this.head.add(builder.curvedSticker(material, muzzleCenter, muzzleRadii, 1.15, 1.45, .46));
-    }
-    // 立体的舌头：舌根埋在嘴筒子里，从张开的嘴里斜着往下伸出来，搭在下嘴唇外面，中间有一道浅沟
-    this.tongue.position.set(0, -.175, .405);
-    const tongueMaterial = builder.toon(COLORS.tongue, .15, 0xffffff);
-    const tongueBody = builder.ellipsoid(tongueMaterial, .048, .088, .018, 0, -.055, .035);
-    tongueBody.rotation.x = .62;
-    const tongueGroove = builder.sticker(builder.solid(0xb8344c), .005, .055, 0, -.066, .052);
-    tongueGroove.rotation.x = .62;
-    this.tongue.add(tongueBody, tongueGroove);
-    this.head.add(this.tongue);
+    // ---- 嘴巴：真的能张开的立体嘴 ----
+    // 上嘴筒子（不动）+ 下巴（绕后端往下转）；中间是深色的口腔；舌头分两截都长在下巴上：
+    // 里面一截平躺在下巴上（在嘴里），外面一截从下巴前端伸出嘴外、往下垂（吐舌头时才伸出来）
+    const upperMuzzleCenter = new THREE.Vector3(0, -.085, .3);
+    const upperMuzzleRadii = new THREE.Vector3(.17, .105, .16);
+    this.head.add(builder.ellipsoid(cream, upperMuzzleRadii.x, upperMuzzleRadii.y, upperMuzzleRadii.z, upperMuzzleCenter.x, upperMuzzleCenter.y, upperMuzzleCenter.z));
+    this.head.add(builder.ellipsoid(builder.solid(0x2b1714), .125, .045, .13, 0, -.155, .29, false));   // 口腔（深棕黑色）
+    this.jaw.position.set(0, -.15, .2);                // 下巴的转轴在后面
+    this.head.add(this.jaw);
+    this.jaw.add(builder.ellipsoid(cream, .135, .05, .15, 0, -.015, .09));
+    const tongueBuilder = new ModelBuilder({ outlineColor: 0x5a1a24, outlineThickness: .008, rimColor: 0xffffff });
+    const tongueMaterial = tongueBuilder.toon(COLORS.tongue, .15, 0xffffff);
+    const tongueGrooveMaterial = tongueBuilder.solid(0xb8344c);
+    // 嘴里的那一截：平躺在下巴上
+    this.jaw.add(tongueBuilder.ellipsoid(tongueMaterial, .06, .016, .11, 0, .03, .1));
+    // 嘴外的那一截：从下巴前端伸出来，越过牙齿往下垂，舌尖稍微往前翘；中间一道浅沟
+    this.tongueTip.position.set(0, .03, .2);
+    const hangingTongue = tongueBuilder.ellipsoid(tongueMaterial, .055, .072, .016, 0, -.058, .03);
+    hangingTongue.rotation.x = -.45;
+    const groove = tongueBuilder.sticker(tongueGrooveMaterial, .005, .045, 0, -.055, .046);
+    groove.rotation.x = -.45;
+    this.tongueTip.add(hangingTongue, groove);
+    this.jaw.add(this.tongueTip);
+    this.head.add(builder.ellipsoid(builder.toon(COLORS.nose, .35, 0xffffff), .075, .052, .048, 0, -.015, .435)); // 黑鼻头（圆圆的，离嘴巴有一小段人中）
+    this.head.add(builder.sticker(builder.solid(0xffffff), .022, .013, -.018, .012, .482));                  // 鼻头上的小白点高光
+    // 上嘴唇：w 形的招牌笑线，贴合上嘴筒子的弧面（张嘴时就是上嘴唇的边）
+    this.head.add(builder.curvedSticker(builder.decal(createCanvasTexture(drawShibaSmile)), upperMuzzleCenter, upperMuzzleRadii, 1.15, 1.4, .5));
     this.blushMaterial = builder.decal(createCanvasTexture(drawBlush, 64));
     this.blushMaterial.opacity = .35;
     for (const side of [-1, 1]) this.head.add(builder.sticker(this.blushMaterial, .065, .038, side * .25, -.06, .3, side * .6));
@@ -357,15 +328,14 @@ export class ShibaModel implements PetModel {
       ear.group.rotation.x = -pose.earBack * 1.1 + pose.earPerk * .12;
       ear.group.rotation.z = ear.side * -(.2 + pose.earBack * .5);
     }
-    // 特有动作：张嘴笑着吐舌头（叫的时候也是张嘴）。两张嘴巴贴纸交叉淡入淡出
-    const openAmount = Math.min(1, Math.max(pose.special, pose.mouthOpen));
-    this.openMouthMaterial.opacity = openAmount;
-    this.closedMouthMaterial.opacity = 1 - openAmount;
-    // 吐舌头时舌头从嘴里垂出来（张嘴叫的时候只露一点点），一边喘气一边轻轻晃
-    const tongueAmount = Math.max(pose.special, pose.mouthOpen * .35);
-    this.tongue.visible = tongueAmount > .03;
-    this.tongue.scale.set(1, Math.max(.001, tongueAmount), 1);
-    this.tongue.rotation.set(Math.sin(elapsedSeconds * 9) * .08 * pose.special, 0, Math.sin(elapsedSeconds * 4.5) * .06 * pose.special);
+    // ---- 张嘴、吐舌头 ----
+    // 叫的时候张嘴，只看得到嘴里的舌头；吐舌头时下巴张开，外面那半截舌头从嘴里伸出来、垂在下巴前面，一边喘气一边晃
+    const openAmount = Math.min(1, Math.max(pose.special * .9, pose.mouthOpen));
+    const panting = Math.sin(elapsedSeconds * 9) * .04 * pose.special;   // 喘气：下巴一张一合
+    this.jaw.rotation.x = openAmount * .42 + panting;
+    this.tongueTip.visible = pose.special > .03;
+    this.tongueTip.scale.set(1, Math.max(.001, pose.special), Math.max(.001, pose.special));
+    this.tongueTip.rotation.set(Math.sin(elapsedSeconds * 9 + .6) * .1 * pose.special, 0, Math.sin(elapsedSeconds * 4.5) * .08 * pose.special);
 
     // ---- 卷尾巴：开心时左右猛摇 ----
     this.tailBase.rotation.x = -(pose.tailLift - .6) * .25;

@@ -123,6 +123,8 @@ export class GoldfishModel implements PetModel {
   private readonly bodyMesh: THREE.Mesh;
   private readonly eyes: PetEye[] = [];
   private readonly mouth = new THREE.Group();
+  /** 鳃盖（左右各一片）：呼吸时后边缘往外掀开，露出下面红色的鳃 */
+  private readonly gillCovers: THREE.Group[] = [];
   private readonly tailLobes: TailLobe[] = [];
   private readonly dorsalHolder = new THREE.Group();
   private readonly dorsalFin: VeilFin;
@@ -162,7 +164,7 @@ export class GoldfishModel implements PetModel {
     // 头顶和两腮的肉瘤：几颗圆润的大鼓包贴在头的表面上（颜色比头暖一点点，不加描边；避开眼睛和嘴巴）
     const bumpDirections: [number, number, number][] = [   // [左右角度, 仰角, 大小]
       [0, 80, .17], [-55, 62, .16], [55, 62, .16], [-128, 58, .15], [128, 58, .15], [0, 50, .13], [180, 70, .14],
-      [-95, 25, .14], [95, 25, .14], [-115, -8, .12], [115, -8, .12], [-75, 52, .12], [75, 52, .12],
+      [-95, 25, .14], [95, 25, .14], [-75, 52, .12], [75, 52, .12],   // 两腮靠后下方留给鱼鳃
     ];
     for (const [azimuthDegrees, elevationDegrees, radius] of bumpDirections) {
       const azimuth = THREE.MathUtils.degToRad(azimuthDegrees);
@@ -171,6 +173,8 @@ export class GoldfishModel implements PetModel {
       const position = direction.multiply(headRadii).multiplyScalar(.86).add(headCenter);
       this.fish.add(builder.ellipsoid(wenMaterial, radius, radius * .85, radius, position.x, position.y, position.z, false));
     }
+
+    this.addGills();
 
     // 圆溜溜的大眼睛：朝前、带高光，正面看是一副乖巧的样子
     for (const side of [-1, 1]) {
@@ -240,6 +244,36 @@ export class GoldfishModel implements PetModel {
 
     this.sign.group.position.set(0, .3, .66);
     this.root.add(this.sign.group);
+  }
+
+  /**
+   * 鱼鳃：头两侧靠后、偏下的位置各一片弧形的白色鳃盖（细描边勾出形状），下面藏着一道红色的鳃。
+   * 鳃盖的前边缘是转轴，呼吸时后边缘往外掀开、露出红色的鳃，再合上
+   */
+  private addGills(): void {
+    const gillBuilder = new ModelBuilder({ outlineColor: 0x3a3440, outlineThickness: .007, rimColor: 0xffffff });
+    const gillMaterial = gillBuilder.toon(COLORS.head, .12, 0xffffff);
+    const redGillMaterial = gillBuilder.toon(0xd23a4c, .2, 0xffffff);
+    for (const side of [-1, 1]) {
+      // 鳃在头和身子交接的那道折痕上（这里是最外面的一层，不会被头或身子盖住），偏下一点；朝外、稍微朝后
+      const point = new THREE.Vector3(side * .287, -.02, .17);
+      const normal = new THREE.Vector3(side, -.15, -.25).normalize();
+      // 在表面上建一个局部坐标：x 朝鱼头前方、y 沿表面、z 朝外
+      const forward = new THREE.Vector3(0, 0, 1).projectOnPlane(normal).normalize();
+      const up = new THREE.Vector3().crossVectors(normal, forward).normalize();   // 保证是右手坐标系，两边都不会镜像
+      const basis = new THREE.Matrix4().makeBasis(forward, up, normal);
+      const gill = new THREE.Group();
+      gill.position.copy(point);
+      gill.quaternion.setFromRotationMatrix(basis);
+      // 红色的鳃（不动，藏在鳃盖下面）
+      gill.add(gillBuilder.ellipsoid(redGillMaterial, .07, .14, .012, -.065, 0, -.006, false));
+      // 鳃盖：前边缘贴着转轴，往后伸出去一片弧形
+      const cover = new THREE.Group();
+      cover.add(gillBuilder.ellipsoid(gillMaterial, .09, .165, .02, -.072, 0, .004));
+      gill.add(cover);
+      this.fish.add(gill);
+      this.gillCovers.push(cover);
+    }
   }
 
   /**
@@ -375,6 +409,10 @@ export class GoldfishModel implements PetModel {
     this.gulpAmount = Math.max(0, this.gulpAmount - deltaSeconds * 4);
     const mouthOpen = Math.max(pose.mouthOpen, pose.special * (.6 + Math.sin(elapsedSeconds * 9) * .4), Math.sin(this.gulpAmount * Math.PI) * .5);
     this.mouth.scale.set(1 + mouthOpen * .3, .65 + mouthOpen * .7, 1);
+
+    // ---- 鱼鳃：一张一合地呼吸（游得越快呼吸越快），张开时露出红色的鳃 ----
+    const gillOpen = (Math.sin(this.swimPhase * .55 + elapsedSeconds * 2.2) + 1) / 2 * (.7 + swimEffort * .2) + pose.special * .2;
+    for (const cover of this.gillCovers) cover.rotation.y = Math.min(1, gillOpen) * .65;
 
     // ---- 吐泡泡：特有动作时一串一串地吐，平时偶尔吐一个 ----
     this.bubbleTimer -= deltaSeconds;
