@@ -67,6 +67,14 @@ export class PetScene {
     return this.petModel;
   }
 
+  /** 屏幕缩放比变了：按新的缩放比重设画面清晰度（否则会发糊或者浪费性能） */
+  updatePixelRatio(): void {
+    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+    if (pixelRatio === this.renderer.getPixelRatio()) return;
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(CAT_CANVAS_SIZE, CAT_CANVAS_SIZE);
+  }
+
   render(): void {
     this.renderer.render(this.scene, this.camera);
   }

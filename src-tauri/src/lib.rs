@@ -37,6 +37,7 @@ pub fn run() {
             frontend_log,
             pet_window::get_desktop_layout,
             pet_window::move_pet_window,
+            pet_window::resize_pet_window,
             pet_window::set_click_through,
             pet_window::get_pet_position,
             pet_window::save_pet_position,

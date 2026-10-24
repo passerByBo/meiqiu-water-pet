@@ -211,6 +211,8 @@ const subscribe = <Payload>(eventName: string, handler: (payload: Payload) => vo
 export const backendApi = {
   getDesktopLayout: () => invoke<DesktopLayoutPayload>('get_desktop_layout'),
   movePetWindow: (x: number, y: number) => invoke<void>('move_pet_window', { x, y }),
+  /** 调整宠物窗口大小（物理像素） */
+  resizePetWindow: (width: number, height: number) => invoke<void>('resize_pet_window', { width, height }),
   setClickThrough: (enabled: boolean) => invoke<void>('set_click_through', { enabled }),
   /** 上次保存的宠物位置（屏幕逻辑坐标，脚底中心）；没有就是 null */
   getPetPosition: () => invoke<Point | null>('get_pet_position'),

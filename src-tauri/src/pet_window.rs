@@ -82,6 +82,26 @@ pub fn move_pet_window(window: WebviewWindow, x: i32, y: i32) {
     move_to(&window, x, y);
 }
 
+/// 调整宠物窗口大小（物理像素）。缩放比或分辨率变了以后系统不一定会自动放大缩小窗口，
+/// 前端按当前显示器的缩放比算好尺寸调用这里，保证窗口里的内容不会被截掉
+#[tauri::command]
+pub fn resize_pet_window(window: WebviewWindow, width: i32, height: i32) {
+    // 合理范围：再高的缩放比（500%）也不会超过这个大小，防止传进奇怪的数字
+    let width = width.clamp(100, 4000);
+    let height = height.clamp(100, 4000);
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE};
+        let hwnd = HWND(native_handle(&window) as *mut core::ffi::c_void);
+        let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, width, height, SWP_NOMOVE | SWP_NOACTIVATE);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window.set_size(tauri::PhysicalSize::new(width as u32, height as u32));
+    }
+}
+
 #[tauri::command]
 pub fn set_click_through(window: WebviewWindow, enabled: bool) -> Result<(), String> {
     window.set_ignore_cursor_events(enabled).map_err(|error| error.to_string())

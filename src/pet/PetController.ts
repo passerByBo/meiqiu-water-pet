@@ -92,6 +92,10 @@ export class PetController {
   /** 猫咪窗口左上角在当前显示器上的逻辑坐标 */
   private windowOrigin: Point = { x: 0, y: 0 };
   private lastSentPhysicalPosition = { x: Number.NaN, y: Number.NaN };
+  /** 上次设置的窗口大小（物理像素）；缩放比变了要跟着变 */
+  private lastSentWindowSize = { width: 0, height: 0 };
+  /** 上次看到的屏幕几何（显示器、分辨率、缩放比、可用区域），用来发现"分辨率 / 缩放比变了" */
+  private lastScreenGeometry = '';
   private isClickThrough = true;
   private pressState: PressState | null = null;
   private lastClickTime = 0;
@@ -270,6 +274,7 @@ export class PetController {
     this.applyCatSize(); // 换了显示器或改了缩放比：重新适配猫咪大小
     this.freeSpaceMap.rebuild(this.desktop.workArea, this.desktop.getObstacles().map(obstacle => obstacle.rect));
     this.updateForegroundActivity();
+    if (this.handleScreenGeometryChange()) return;
     if (!isMonitorStillPresent) {
       // 猫所在的显示器被拔掉了：回到主屏底边
       this.brain.peek = null;
@@ -280,6 +285,30 @@ export class PetController {
       return;
     }
     this.brain.handleLayoutChange();
+  }
+
+  /**
+   * 分辨率、缩放比或者任务栏位置变了：窗口大小按新的缩放比重新设置；
+   * 宠物如果已经不在新的屏幕可用范围里（比如分辨率调小了），就把它放回屏幕里的安全位置。
+   * 返回 true 表示已经复位过，后面的布局处理不用再做
+   */
+  private handleScreenGeometryChange(): boolean {
+    const monitor = this.desktop.currentMonitor;
+    if (!monitor) return false;
+    const geometry = JSON.stringify([monitor.id, monitor.bounds, monitor.workArea, monitor.scaleFactor]);
+    const previousGeometry = this.lastScreenGeometry;
+    this.lastScreenGeometry = geometry;
+    if (!previousGeometry || geometry === previousGeometry) return false;
+    console.info(`屏幕变了：${Math.round(this.desktop.screenRect.right)}×${Math.round(this.desktop.screenRect.bottom)}，缩放 ${Math.round(monitor.scaleFactor * 100)}%`);
+    this.ensureWindowSize(true);
+    if (!this.brain.isReady) return false;
+    const workArea = this.desktop.workArea;
+    const position = this.brain.position;
+    const isOutside = !Number.isFinite(position.x) || !Number.isFinite(position.y)
+      || position.x < workArea.left || position.x > workArea.right || position.y < workArea.top || position.y > workArea.bottom + 1;
+    if (!isOutside) return false;
+    this.resetPet('屏幕分辨率或缩放比变了，宠物跑到屏幕外面了');
+    return true;
   }
 
   /** 你切换了窗口：猫转头看一眼；开会 / 全屏时保持低调 */
@@ -375,6 +404,7 @@ export class PetController {
   /** 每半秒检查一次：等打字停下的提醒、同一个软件用了太久、作息 */
   private checkSlowConditions(): void {
     const now = performance.now();
+    this.checkWindowSize();
     if (this.settings && now - this.lastRoutineCheckTime > 10_000) {
       this.lastRoutineCheckTime = now;
       const events = this.routine.update(this.settings, !this.isUserAway);
@@ -1000,9 +1030,32 @@ export class PetController {
     };
     const physical = this.desktop.toPhysical(this.windowOrigin.x, this.windowOrigin.y);
     if (!Number.isFinite(physical.x) || !Number.isFinite(physical.y)) return; // 位置坏了不发给系统，大脑的自检会复位
+    this.ensureWindowSize();
     if (physical.x === this.lastSentPhysicalPosition.x && physical.y === this.lastSentPhysicalPosition.y) return;
     this.lastSentPhysicalPosition = physical;
     void backendApi.movePetWindow(physical.x, physical.y);
+  }
+
+  /**
+   * 宠物窗口的大小 = 固定的逻辑尺寸 × 所在显示器的缩放比（物理像素）。
+   * 改了缩放比、分辨率，或者拖到缩放比不一样的另一块屏幕上时，系统不一定会自动调整窗口大小，
+   * 窗口太小时宠物会被截掉（看起来就是"不见了"），所以由这里主动调整。force：不管上次发过什么都重新设置一次
+   */
+  private ensureWindowSize(force = false): void {
+    const scale = this.desktop.scaleFactor;
+    const width = Math.round(PET_WINDOW_WIDTH * scale);
+    const height = Math.round(PET_WINDOW_HEIGHT * scale);
+    if (!force && width === this.lastSentWindowSize.width && height === this.lastSentWindowSize.height) return;
+    this.lastSentWindowSize = { width, height };
+    void backendApi.resizePetWindow(width, height);
+    this.scene.updatePixelRatio();
+  }
+
+  /** 每半秒核对一次：窗口里实际能显示的大小不对（被系统或别的原因改了），就重新设置窗口大小 */
+  private checkWindowSize(): void {
+    const isWrongSize = Math.abs(window.innerWidth - PET_WINDOW_WIDTH) > 1 || Math.abs(window.innerHeight - PET_WINDOW_HEIGHT) > 1;
+    if (isWrongSize) this.ensureWindowSize(true);
+    this.scene.updatePixelRatio();
   }
 
   /** 偷看时：把猫和藏身窗口重叠的部分裁成透明（用 evenodd 在画布上挖一个洞） */
