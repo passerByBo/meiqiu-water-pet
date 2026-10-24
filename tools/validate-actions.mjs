@@ -11,11 +11,12 @@ const actionFile = process.argv[2] ?? path.join(projectRoot, 'public/config/cat-
 const manifestFile = path.join(projectRoot, 'public/voice/voice-manifest.json');
 
 // 这些清单要和代码保持一致：actionSystem.ts（触发时机、姿势、条件）、CatBrain.runAbility（能力）、BlackCatModel.createDefaultPose（姿势参数）
-const TRIGGERS = ['idle', 'pet', 'hug', 'hugEnd', 'teaser', 'scare', 'drink', 'goalReached', 'snooze', 'reminderIgnored', 'customDone', 'wakeUp', 'trick'];
+const TRIGGERS = ['idle', 'pet', 'hug', 'hugEnd', 'teaser', 'scare', 'drink', 'goalReached', 'snooze', 'reminderIgnored', 'customDone', 'wakeUp', 'trick',
+  'coverExposed', 'coverYanked', 'coverPartial', 'coverReturned', 'coverGone', 'windowDropped', 'rideSlow', 'rideFast', 'shakenOff', 'windowDragged', 'desktopCleared', 'windowPopped'];
 const PLACES = ['floor', 'window', 'edge', 'anchored'];
 const POSES = ['sit', 'stand', 'groom', 'stretch', 'rest', 'sleep', 'petted', 'happy', 'sulk', 'startled', 'dodge', 'scratch', 'yawn', 'observe', 'rolling', 'swat', 'hugged'];
 const ABILITIES = ['wander', 'peek', 'patrol', 'roll', 'sleep', 'goEdge', 'flee', 'approachCursor', 'dodgeHop', 'pounceCursor', 'walkOnWindow', 'observe',
-  'hopToOtherWindow', 'jumpDown', 'mischief:zoomies', 'mischief:pounce', 'mischief:occupyWindow', 'mischief:pushCup', 'mischief:follow'];
+  'hopToOtherWindow', 'jumpDown', 'rehideHere', 'emerge', 'hideUnder', 'mischief:zoomies', 'mischief:pounce', 'mischief:occupyWindow', 'mischief:pushCup', 'mischief:follow'];
 const SOUNDS = ['purr', 'knock', 'crash', 'boing', 'meow:call', 'meow:short', 'meow:question', 'meow:scared', 'meow:complain'];
 const POSE_KEYS = ['stand', 'sit', 'lie', 'stretch', 'lifted', 'walkAmount', 'headYaw', 'headPitch', 'headRoll', 'eyeOpen', 'squint', 'pupilX', 'pupilY',
   'pupilWidth', 'earBack', 'earPerk', 'mouthOpen', 'tailLift', 'tailSwing', 'tailSpeed', 'tailWrap', 'groom', 'bounce', 'legKick', 'breathRate', 'crouch',

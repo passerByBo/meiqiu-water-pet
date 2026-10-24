@@ -13,6 +13,7 @@ import { actionLibrary, type ActionContext, type ActionDefinition, type ActionSt
 import type { DesktopLayout, LocalWindow } from './DesktopLayout';
 import type { FreeSpaceMap } from './FreeSpaceMap';
 import type { PeekGeometry, PeekPlanner, PeekSpot } from './PeekPlanner';
+import { WindowMotionTracker, type WindowMotionEvent } from './WindowMotionTracker';
 import { createDefaultPose, POSE_NAMES, type CatPose } from './BlackCatModel';
 import type { MeowKind, SoundEffect } from './catVoice';
 import type { ActivityLevel, MischiefLevel, MoodLevel, RoamMode } from '../shared/backendApi';
@@ -78,6 +79,32 @@ const MIN_WINDOW_WIDTH_FOR_STANDING = 200;
 const PUSH_CUP_SECONDS = 2.6;
 const ROLL_SECONDS = 1.4;
 
+/** 窗口拖得多快算"猛地一拽"（逻辑像素/秒） */
+const YANK_SPEED = 1500;
+/** 站在窗口上时，窗口拖得多快算"猛拖"（站不稳） */
+const RIDE_FAST_SPEED = 1300;
+/** 被挡住的程度：露出来超过这个比例算"被发现了"，低于下面那个算"还藏着" */
+const EXPOSED_RATIO = .85;
+const HIDDEN_RATIO = .25;
+
+/**
+ * 躲在某个窗口后面，但已经不在"偷看"的固定流程里（藏身的窗口被拖动过，或者窗口被拖到它身上）：
+ * 宠物留在桌面上原来的位置，被这个窗口挡住的部分照样藏着，露出来的部分照样看得见（和现实一样）
+ */
+interface LooseCover {
+  windowId: string;
+  /** 怎么藏进去的：peek 自己躲的 / dropped 窗口盖到它身上 */
+  origin: 'peek' | 'dropped';
+  /** 现在被挡住的程度：hidden 几乎全挡住 / partial 挡住一部分 / exposed 几乎全露出来 */
+  level: 'hidden' | 'partial' | 'exposed';
+  /** 等你停手（窗口不动了）再反应 */
+  isWaitingForSettle: boolean;
+  /** 被发现过（露出来过），之后窗口再盖回来算"又藏好了" */
+  wasExposed: boolean;
+  /** 窗口停下来过一次（盖到身上的窗口：停下来以后才算真的藏在它下面） */
+  hasSettled: boolean;
+}
+
 interface PeekState {
   spot: PeekSpot;
   peekCount: number;
@@ -122,6 +149,15 @@ export class CatBrain {
   /** 当前是否在屏幕底边（任务栏上沿或全屏时的屏幕底边） */
   isOnEdge = false;
   peek: PeekState | null = null;
+  /** 躲在窗口后面、宠物留在原地（窗口被拖动过）；见 LooseCover */
+  looseCover: LooseCover | null = null;
+  /** 窗口动态：哪个窗口在被拖、拖多快、有没有被甩 */
+  readonly windowMotion = new WindowMotionTracker();
+  /** 上次对"你在拖窗口 / 弹出新窗口"做反应的时间（不要每次都反应） */
+  private lastWindowWatchTime = -99;
+  /** 站在窗口上被拖着走：上次反应的时间、这一趟有没有反应过 */
+  private lastRideReactionTime = -99;
+  private ridingDragWindowId: string | null = null;
   surface: WindowSurface | null = null;
   jump: JumpState | null = null;
   walkPhase = 0;
@@ -216,7 +252,28 @@ export class CatBrain {
 
   /** 偷看时需要裁掉的区域（猫和藏身窗口重叠的部分变透明，看起来就像躲在窗口后面） */
   get clipRect(): Rect | null {
-    return this.peek ? this.peekGeometry?.cover ?? null : null;
+    if (this.peek) return this.peekGeometry?.cover ?? null;
+    return this.looseCoverWindow?.rect ?? null;
+  }
+
+  /** 原地躲着的那个窗口（关掉、最小化、最大化了就是 undefined） */
+  get looseCoverWindow(): LocalWindow | undefined {
+    if (!this.looseCover) return undefined;
+    const window = this.desktop.findWindow(this.looseCover.windowId);
+    return window && !window.isMaximized && !window.isFullscreen ? window : undefined;
+  }
+
+  /** 宠物身体大概占的区域（用来算被窗口挡住了多少） */
+  private bodyRectAt(position: Point): Rect {
+    return { left: position.x - catPixels(80), right: position.x + catPixels(80), top: position.y - catPixels(140), bottom: position.y + catPixels(8) };
+  }
+
+  /** 身体有多少露在这个区域外面（0 = 全被挡住，1 = 完全没挡） */
+  private exposureTo(rect: Rect): number {
+    const body = this.bodyRectAt(this.position);
+    const overlapWidth = Math.max(0, Math.min(body.right, rect.right) - Math.max(body.left, rect.left));
+    const overlapHeight = Math.max(0, Math.min(body.bottom, rect.bottom) - Math.max(body.top, rect.top));
+    return 1 - overlapWidth * overlapHeight / ((body.right - body.left) * (body.bottom - body.top));
   }
 
   get isSleeping(): boolean { return this.behavior === 'sleep'; }
@@ -269,6 +326,11 @@ export class CatBrain {
   // =====================================================================
   /** 上一个动作做完了：想想接下来做什么 */
   chooseNextBehavior(): void {
+    // 还躲在窗口后面：接着躲或者走出来（不要在窗口后面溜达）
+    if (this.looseCover && !this.looseCover.isWaitingForSettle) {
+      const window = this.looseCoverWindow;
+      if (window && this.exposureTo(window.rect) < .7) { this.continueFromLooseCover(); return; }
+    }
     // 站着的窗口不能站了（最大化了、变窄了）：先跳下来
     const window = this.surfaceWindow;
     if (this.surface && (!window || !this.isWindowTopUsable(window))) { this.jumpDown(); return; }
@@ -459,6 +521,12 @@ export class CatBrain {
         if (!this.tryJumpOntoWindow(undefined, undefined, window.id)) this.jumpDown();
         return true;
       case 'jumpDown': if (!this.surface) return false; this.jumpDown(); return true;
+      case 'rehideHere': return this.rehideHere();
+      case 'emerge': return this.emergeFromCover();
+      case 'hideUnder':
+        if (!this.looseCover) return false;
+        this.setBehavior('hiding', randomBetween(3, 6));
+        return true;
       default:
         console.warn(`动作配置里写了不认识的能力：${name}`);
         return false;
@@ -660,6 +728,23 @@ export class CatBrain {
       this.position.y += deltaY;
       this.path.forEach(point => { point.x += deltaX; point.y += deltaY; });
       this.surface.lastAnchor = { x: window.rect.left, y: window.rect.top };
+      this.reactToRide(window);
+    }
+  }
+
+  /** 站着的窗口被拖着走：猛拖时站不稳，慢慢拖时像坐车（每一趟最多反应一次） */
+  private reactToRide(window: LocalWindow): void {
+    if (this.reminder || this.behavior === 'jumpPrep') return;
+    const now = this.elapsedSeconds;
+    const speed = this.windowMotion.speedOf(window.id, now);
+    if (speed > RIDE_FAST_SPEED && now - this.lastRideReactionTime > 4) {
+      this.lastRideReactionTime = now;
+      this.ridingDragWindowId = window.id;
+      this.performAction('rideFast', true);
+    } else if (speed > 40 && this.ridingDragWindowId !== window.id && now - this.lastRideReactionTime > 12 && CALM_BEHAVIORS.has(this.behavior)) {
+      this.lastRideReactionTime = now;
+      this.ridingDragWindowId = window.id;
+      this.performAction('rideSlow');
     }
   }
 
@@ -739,6 +824,7 @@ export class CatBrain {
     if (this.roamMode === 'anchored' && !isRequestedByUser) return false;
     if (isRequestedByUser && this.peek) this.peek = null; // 正在别处偷看：换个地方
     this.surface = null;
+    this.looseCover = null;
     const focusX = this.cursor.x > -1000 ? this.cursor.x : undefined;
     const plan = this.peekPlanner.plan(this.position, this.isOnEdge, this.edgeLineY, isRequestedByUser, focusX);
     if (!plan) return false;
@@ -754,6 +840,7 @@ export class CatBrain {
   private peekSneakIn(): void {
     const geometry = this.peekGeometry;
     if (!geometry) { this.abortPeek(); return; }
+    if (Math.hypot(geometry.tailOutPoint.x - this.position.x, geometry.tailOutPoint.y - this.position.y) > catPixels(260)) { this.abortPeek(); return; }
     this.moveAlong([geometry.tailOutPoint], SNEAK_SPEED, 'sneakIn', () => this.setBehavior('tailOut', randomBetween(1.2, 2)), { walkStyle: 'sneak' });
   }
 
@@ -824,33 +911,247 @@ export class CatBrain {
     this.setBehavior('landing', .4);
   }
 
-  /** 藏身的窗口被拖动：猫扒着窗口跟着走；窗口没了：掉下来 */
+  /**
+   * 藏身处变了：
+   *   藏身的窗口被关掉、最小化、最大化 → "藏身处没了"；
+   *   藏身的窗口被拖动 → 宠物留在桌面上原来的位置（和现实一样），被挡住多少就藏多少，见 updateLooseCover；
+   *   任务栏、屏幕边缘挪了（例如任务栏换了位置）→ 跟着挪
+   */
   private refreshPeek(): void {
+    const peek = this.peek;
     const geometry = this.peekGeometry;
-    if (!geometry || !this.peek) {
+    if (!geometry || !peek) {
       this.peek = null;
-      this.effects.sayLine('peek-cover-gone', { isImportant: true });
-      this.setBehavior('landing', .4);
+      this.reactToCover('coverGone');
       return;
     }
-    const deltaX = geometry.anchor.x - this.peek.lastAnchor.x;
-    const deltaY = geometry.anchor.y - this.peek.lastAnchor.y;
-    if (deltaX || deltaY) {
+    const deltaX = geometry.anchor.x - peek.lastAnchor.x;
+    const deltaY = geometry.anchor.y - peek.lastAnchor.y;
+    if (!deltaX && !deltaY) return;
+    peek.lastAnchor = { ...geometry.anchor };
+    if (peek.spot.kind !== 'window' || !peek.spot.windowId) {
       this.position.x += deltaX;
       this.position.y += deltaY;
       this.path.forEach(point => { point.x += deltaX; point.y += deltaY; });
-      this.peek.lastAnchor = { ...geometry.anchor };
+      return;
     }
+    // 还在外面（正走过去 / 正走出来）：不用管，走到的地方会按窗口的新位置重新算
+    if (this.behavior === 'sneakTo' || this.behavior === 'peekExit') return;
+    // 已经躲进去了：宠物不跟着窗口走，改成"原地躲着"
+    this.peek = null;
+    this.path = [];
+    this.onArrive = null;
+    this.looseCover = { windowId: peek.spot.windowId, origin: 'peek', level: 'hidden', isWaitingForSettle: false, wasExposed: false, hasSettled: true };
+    this.setBehavior('hiding', Infinity); // 先缩着别动，看窗口怎么挪
+    this.updateLooseCover();
+  }
+
+  // =====================================================================
+  // 原地躲在窗口后面（窗口被拖开、拖回来、盖到身上）
+  // =====================================================================
+  /** 窗口位置变了：重新算被挡住的程度，程度变了就做出反应 */
+  private updateLooseCover(): void {
+    const cover = this.looseCover;
+    if (!cover) return;
+    const window = this.looseCoverWindow;
+    if (!window) {
+      // 窗口被关掉、最小化、最大化了（自己正往外走的时候不算）
+      const wasHiding = cover.level !== 'exposed' && (cover.origin === 'peek' || cover.hasSettled) && !this.path.length;
+      this.looseCover = null;
+      if (wasHiding) this.reactToCover('coverGone');
+      return;
+    }
+    const exposure = this.exposureTo(window.rect);
+    const level = exposure > EXPOSED_RATIO ? 'exposed' : exposure > HIDDEN_RATIO ? 'partial' : 'hidden';
+    if (level === cover.level) return;
+    const previousLevel = cover.level;
+    cover.level = level;
+    // 只对"窗口被挪动"造成的变化做反应；宠物自己走出来、走进去时露多露少很正常
+    if (!this.windowMotion.isMoving(window.id, this.elapsedSeconds)) return;
+    if (level === 'exposed') {
+      cover.isWaitingForSettle = false;
+      if (cover.origin === 'dropped' && !cover.hasSettled) {
+        // 窗口只是从它身上扫过去：吓一跳
+        this.looseCover = null;
+        this.setBehavior('startled', .9);
+        this.effects.float('！', this.headPosition);
+        return;
+      }
+      cover.wasExposed = true;
+      // 一露出来马上反应（被发现了！），不用等你停手
+      const speed = this.windowMotion.speedOf(window.id, this.elapsedSeconds);
+      this.reactToCover(speed > YANK_SPEED ? 'coverYanked' : 'coverExposed');
+      return;
+    }
+    // 露出一半 / 又被盖住：等你停手再反应
+    cover.isWaitingForSettle = true;
+    if (previousLevel === 'exposed' || !CALM_BEHAVIORS.has(this.behavior)) return;
+    this.setBehavior('hiding', Infinity); // 缩着别动
+  }
+
+  /** 每帧检查：窗口停下来了就做出反应；窗口完全离开了身体就不用再裁剪了 */
+  private updateLooseCoverEachFrame(): void {
+    const cover = this.looseCover;
+    if (!cover) return;
+    const window = this.looseCoverWindow;
+    if (!window) return; // 窗口没了由布局变化处理
+    const isWindowMoving = this.windowMotion.isMoving(window.id, this.elapsedSeconds);
+    if (cover.isWaitingForSettle && !isWindowMoving) {
+      cover.isWaitingForSettle = false;
+      const isFirstSettle = !cover.hasSettled;
+      cover.hasSettled = true;
+      if (cover.origin === 'dropped' && isFirstSettle) {
+        // 窗口盖到身上就不动了：顺势躲在下面，或者钻出来
+        if (!this.performAction('windowDropped')) this.continueFromLooseCover();
+      } else if (cover.level === 'partial') {
+        this.reactToCover('coverPartial');
+      } else if (cover.level === 'hidden') {
+        if (cover.wasExposed) this.reactToCover('coverReturned');
+        else this.continueFromLooseCover(true); // 窗口挪了但它一直藏得好好的：在新位置接着躲
+      }
+      return;
+    }
+    // 走出来了 / 窗口挪走了：完全没挡住，不用再裁剪
+    if (!cover.isWaitingForSettle && this.exposureTo(window.rect) >= .999) this.looseCover = null;
+  }
+
+  /** 对藏身处的变化做反应（交给动作系统挑；提醒的时候不分心） */
+  private reactToCover(trigger: ActionTrigger): void {
+    if (this.reminder) return;
+    this.path = [];
+    this.onArrive = null;
+    if (this.performAction(trigger, true)) return;
+    // 动作库里没有合适的反应：保底
+    if (trigger === 'coverGone') this.effects.sayLine('peek-cover-gone', { isImportant: true });
+    this.setBehavior('startled', .9);
+  }
+
+  /**
+   * 原地躲着、接下来干什么：还藏得挺好时，大多在窗口边上找个地方接着躲（之后照常探头）；
+   * 露出来比较多时（或者找不到地方躲）就走出来。preferRehide：一定先试试接着躲
+   */
+  private continueFromLooseCover(preferRehide = false): void {
+    const window = this.looseCoverWindow;
+    const exposure = window ? this.exposureTo(window.rect) : 1;
+    const shouldRehide = preferRehide || (exposure < .5 && Math.random() < .65);
+    if (shouldRehide && this.rehideHere()) return;
+    if (this.emergeFromCover()) return;
+    this.looseCover = null;
+    this.setBehavior('sit', 2);
+  }
+
+  /** 能力 rehideHere：就近在这个窗口的边上重新躲好（之后照常探头偷看） */
+  private rehideHere(): boolean {
+    const window = this.looseCoverWindow;
+    if (!window) return false;
+    const rect = window.rect;
+    const position = this.position;
+    const alongSide = clamp((position.y - rect.top) / Math.max(1, rect.bottom - rect.top), .3, .9);
+    const alongTop = clamp((position.x - rect.left) / Math.max(1, rect.right - rect.left), .15, .85);
+    const candidates: PeekSpot[] = [
+      { kind: 'window', windowId: window.id, exit: 'left', along: alongSide, weight: 1 },
+      { kind: 'window', windowId: window.id, exit: 'right', along: alongSide, weight: 1 },
+      { kind: 'window', windowId: window.id, exit: 'up', along: alongTop, weight: 1 },
+    ];
+    let best: { spot: PeekSpot; geometry: PeekGeometry; distance: number } | null = null;
+    for (const spot of candidates) {
+      const geometry = this.peekPlanner.geometryOf(spot);
+      if (!geometry || !this.peekPlanner.isSpotUsable(spot, geometry)) continue;
+      const distance = Math.hypot(geometry.hiddenPoint.x - position.x, geometry.hiddenPoint.y - position.y);
+      if (!best || distance < best.distance) best = { spot, geometry, distance };
+    }
+    // 太远了就不在这儿躲了（不要隔着半个屏幕直线滑过去）
+    if (!best || best.distance > catPixels(320)) return false;
+    const { spot, geometry } = best;
+    this.looseCover = null;
+    this.peek = { spot, peekCount: 0, lastAnchor: { ...geometry.anchor } };
+    this.moveAlong([geometry.hiddenPoint], SNEAK_SPEED * 1.3, 'slipIn', () => {
+      this.setBehavior('turnHidden', .9);
+      this.targetYaw = geometry.outYaw;
+    }, { walkStyle: 'sneak' });
+    return true;
+  }
+
+  /** 能力 emerge：从窗口后面走出来，到最近的空地上 */
+  private emergeFromCover(): boolean {
+    if (this.freeSpaceMap.freeCellCount === 0) return false;
+    const cellIndex = this.freeSpaceMap.nearestFreeCell(this.position.x, this.position.y);
+    if (cellIndex < 0) return false;
+    const target = this.freeSpaceMap.cellCenter(cellIndex);
+    this.isOnEdge = false;
+    this.moveAlong([target], WALK_SPEED * 1.1, 'wander', () => {
+      this.looseCover = null;
+      this.setBehavior('sit', 2);
+    });
+    return true;
+  }
+
+  /** 盖住宠物身体一大半的窗口（没有就是 undefined） */
+  private windowCoveringPet(): LocalWindow | undefined {
+    return this.desktop.visibleWindows.find(window => !window.isMaximized && !window.isFullscreen && this.exposureTo(window.rect) < .5);
+  }
+
+  /**
+   * 窗口动态带来的反应：站着的窗口被甩、你在拖别的窗口、一下子显示桌面、旁边弹出新窗口。
+   * 返回 true 表示已经处理完，这次布局变化不用再做别的
+   */
+  private handleWindowMotionEvents(events: WindowMotionEvent[]): boolean {
+    const now = this.elapsedSeconds;
+    const isFree = !this.reminder && !this.peek && !this.looseCover && !this.isLowProfile;
+    for (const event of events) {
+      if (event.type === 'shake' && this.surface?.windowId === event.windowId && !this.reminder) {
+        // 站着的窗口被来回甩：站不住，被甩下来
+        this.surface = null;
+        this.effects.float('哇——', this.headPosition);
+        this.jumpDown(() => { if (!this.performAction('shakenOff', true)) this.setBehavior('startled', 1); });
+        return true;
+      }
+      if (event.type === 'dragStart') {
+        if (this.surface?.windowId === event.windowId) { this.ridingDragWindowId = null; continue; } // 新的一趟"坐车"
+        // 你开始拖一个窗口：它注意到了（不是每次都反应）
+        if (isFree && !this.surface && CALM_BEHAVIORS.has(this.behavior) && now - this.lastWindowWatchTime > 25) {
+          this.lastWindowWatchTime = now;
+          this.performAction('windowDragged');
+        }
+      }
+      if (event.type === 'desktopCleared' && isFree && !this.surface && SCARABLE_BEHAVIORS.has(this.behavior)) {
+        this.performAction('desktopCleared', true);
+        return false; // 布局照常更新（空地变多了）
+      }
+      if (event.type === 'appeared' && isFree && !this.surface && SCARABLE_BEHAVIORS.has(this.behavior) && this.behavior !== 'sleep' && now - this.lastWindowWatchTime > 15) {
+        // 旁边弹出新窗口（盖到身上的情况由下面的"被盖住"处理）
+        const rect = event.rect;
+        const nearestX = clamp(this.position.x, rect.left, rect.right);
+        const nearestY = clamp(this.position.y, rect.top, rect.bottom);
+        const distance = Math.hypot(nearestX - this.position.x, nearestY - this.position.y);
+        if (distance > 0 && distance < catPixels(260)) {
+          this.lastWindowWatchTime = now;
+          this.glanceTarget = { x: (rect.left + rect.right) / 2, y: rect.top + 40 };
+          this.glanceSecondsLeft = 2.2;
+          this.performAction('windowPopped');
+        }
+      }
+    }
+    // 有窗口正在被拖：转头盯着看
+    const movingWindowId = this.windowMotion.fastestMovingWindowId(now);
+    if (movingWindowId && !this.surface && !this.peek && !this.looseCover) {
+      const window = this.desktop.findWindow(movingWindowId);
+      if (window) this.glanceAt({ x: (window.rect.left + window.rect.right) / 2, y: window.rect.top + 30 });
+    }
+    return false;
   }
 
   // =====================================================================
   // 窗口布局变化
   // =====================================================================
   handleLayoutChange(): void {
+    const motionEvents = this.windowMotion.update(this.desktop.visibleWindows, this.elapsedSeconds);
     if (!this.isReady || this.behavior === 'lifted' || this.jump) return;
+    if (this.handleWindowMotionEvents(motionEvents)) return;
     if (this.elapsedSeconds < this.layoutReactionPausedUntil && !this.peek && !this.surface) return;
     if (this.peek) { this.refreshPeek(); return; }
     if (this.surface) { this.refreshSurface(); return; }
+    if (this.looseCover) { this.updateLooseCover(); return; }
     if (this.roamMode === 'anchored' || this.reminder || this.behavior === 'zoomies' || this.behavior === 'follow') return;
     if (this.isOnEdge) {
       // 全屏切换时边线高度会变（任务栏上沿 ↔ 屏幕底边）
@@ -862,6 +1163,16 @@ export class CatBrain {
     }
     if (this.roamMode === 'edge' || this.freeSpaceMap.freeCellCount === 0) { this.goEdge(); return; }
     const isCovered = !this.freeSpaceMap.isPositionFree(this.position.x, this.position.y);
+    const coveringWindow = isCovered && this.behavior !== 'flee' && !this.isLowProfile ? this.windowCoveringPet() : undefined;
+    if (coveringWindow) {
+      this.looseCover = {
+        windowId: coveringWindow.id, origin: 'dropped', level: this.exposureTo(coveringWindow.rect) < HIDDEN_RATIO ? 'hidden' : 'partial',
+        isWaitingForSettle: true, wasExposed: false, hasSettled: false,
+      };
+      this.setBehavior('hiding', Infinity);
+      this.effects.float('！', this.headPosition);
+      return;
+    }
     if (isCovered && this.behavior !== 'flee') {
       const cellIndex = this.freeSpaceMap.nearestFreeCell(this.position.x, this.position.y);
       this.moveAlong([this.freeSpaceMap.cellCenter(cellIndex)], RUN_SPEED, 'flee', () => this.setBehavior('sit', 2));
@@ -1241,6 +1552,7 @@ export class CatBrain {
   recover(reason: string): void {
     console.warn(`煤球复位：${reason}`);
     this.peek = null;
+    this.looseCover = null;
     this.surface = null;
     this.jump = null;
     this.endReminder();
@@ -1341,6 +1653,7 @@ export class CatBrain {
         else this.exitPeek();
         break;
       case 'hiding':
+        if (!this.peek && this.looseCover) { this.continueFromLooseCover(); break; } // 躲在盖下来的窗口下面：躲够了
         if (this.peek && this.peek.peekCount >= 3) this.exitPeek(() => { this.effects.sayLine('peek-give-up'); this.setBehavior('sit', 3); });
         // 鼠标还守在出口：再等一会儿，等你移开了再偷偷探出来
         else if (this.isCursorNearPeekExit()) this.behaviorTimer = 1;
@@ -1396,6 +1709,7 @@ export class CatBrain {
     }
 
     this.updateBehaviorEvents();
+    this.updateLooseCoverEachFrame();
     this.checkHealth(deltaSeconds);
 
     // 鼠标高速冲过来：偷看时缩回去，平时吓一跳跑开

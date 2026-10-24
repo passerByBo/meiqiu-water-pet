@@ -228,6 +228,165 @@ async function main(): Promise<void> {
   brain.handleLayoutChange();
   run(30);
 
+  // ---- 场景五：和窗口的互动（躲着时窗口被拖开、盖到身上、站在窗口上被拖、显示桌面……） ----
+  write('【窗口互动】');
+  const triggerLog: string[] = [];
+  const originalPerformAction = brain.performAction.bind(brain);
+  brain.performAction = (trigger: ActionTrigger, ignoreCooldown = false) => { triggerLog.push(trigger); return originalPerformAction(trigger, ignoreCooldown); };
+  type FakeWindow = DesktopLayoutPayload['windows'][number];
+  let currentWindows: FakeWindow[] = payload.windows.map(window => ({ ...window, bounds: { ...window.bounds } }));
+  const applyWindows = (windows: FakeWindow[]) => {
+    currentWindows = windows;
+    desktop.update({ ...payload, windows });
+    freeSpaceMap.rebuild(desktop.workArea, desktop.getObstacles().map(obstacle => obstacle.rect));
+    brain.handleLayoutChange();
+  };
+  /** 拖动一个窗口：每 0.14 秒挪一步（和真实的布局刷新间隔一样） */
+  const dragWindow = (id: string, stepX: number, stepY: number, steps: number) => {
+    for (let index = 0; index < steps; index++) {
+      applyWindows(currentWindows.map(window => window.id === id
+        ? { ...window, bounds: { left: window.bounds.left + stepX, right: window.bounds.right + stepX, top: window.bounds.top + stepY, bottom: window.bounds.bottom + stepY } }
+        : window));
+      run(.14);
+    }
+  };
+  const resetScene = () => {
+    brain.peek = null;
+    brain.looseCover = null;
+    brain.surface = null;
+    applyWindows(payload.windows.map(window => ({ ...window, bounds: { ...window.bounds } })));
+    brain.position = freeSpaceMap.cellCenter(freeSpaceMap.nearestFreeCell(1000, 950));
+    brain.isOnEdge = false;
+    brain.setBehavior('sit', 3);
+    run(40); // 等冷却
+    // 等冷却时它可能自己去躲、跳上窗口、睡觉……再清一次，保证每个用例都从"坐在空地上"开始
+    brain.peek = null;
+    brain.looseCover = null;
+    brain.surface = null;
+    brain.jump = null;
+    brain.position = freeSpaceMap.cellCenter(freeSpaceMap.nearestFreeCell(1000, 950));
+    brain.isOnEdge = false;
+    brain.setBehavior('sit', 60);
+    run(.5);
+  };
+  const hiddenBehaviors = new Set(['slipIn', 'turnHidden', 'hiding', 'peekOut', 'peeking', 'tailOut']);
+  /** 让它躲到微信窗口后面，返回是否躲好了 */
+  const hideBehindChat = (): boolean => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      brain.setBehavior('sit', 30);
+      if (brain.tryStartPeek(true) && brain.peek?.spot.windowId === 'chat') {
+        for (let wait = 0; wait < 60 && !hiddenBehaviors.has(brain.behavior); wait++) run(.5);
+        if (hiddenBehaviors.has(brain.behavior) && brain.peek) return true;
+      }
+      brain.peek = null;
+      run(1);
+    }
+    return false;
+  };
+  /** 把窗口往远离宠物的方向拖 */
+  const awayDirection = () => {
+    const chat = currentWindows.find(window => window.id === 'chat')!;
+    return brain.position.x < (chat.bounds.left + chat.bounds.right) / 2 ? 1 : -1;
+  };
+  const checkCase = (title: string, expected: string[], body: () => void) => {
+    triggerLog.length = 0;
+    body();
+    const hits = triggerLog.filter(trigger => expected.includes(trigger));
+    write(`  ${hits.length ? '✅' : '❌'} ${title}：期望 ${expected.join(' / ')}，实际触发 ${triggerLog.filter(trigger => trigger !== 'idle').join('、') || '无'}`);
+  };
+
+  resetScene();
+  checkCase('躲着时窗口被慢慢拖开（宠物要留在原地）', ['coverExposed'], () => {
+    if (!hideBehindChat()) { write('  ⚠ 没能躲到微信窗口后面'); return; }
+    const start = { ...brain.position };
+    const direction = awayDirection();
+    dragWindow('chat', direction * 25, 0, 4);
+    const moved = Math.hypot(brain.position.x - start.x, brain.position.y - start.y);
+    write(`     拖了 100 像素后宠物移动了 ${Math.round(moved)} 像素（应该接近 0：不跟着窗口走）`);
+    dragWindow('chat', direction * 25, 0, 30);
+    run(4);
+  });
+  resetScene();
+  checkCase('躲着时窗口被猛地拽开', ['coverYanked'], () => {
+    if (!hideBehindChat()) { write('  ⚠ 没能躲到微信窗口后面'); return; }
+    dragWindow('chat', awayDirection() * 260, 0, 3);
+    run(4);
+  });
+  resetScene();
+  checkCase('躲着时窗口被拖开一部分，然后停手', ['coverPartial'], () => {
+    if (!hideBehindChat()) { write('  ⚠ 没能躲到微信窗口后面'); return; }
+    const window = currentWindows.find(item => item.id === 'chat')!;
+    const coverRect = { left: window.bounds.left, right: window.bounds.right, top: window.bounds.top, bottom: window.bounds.bottom };
+    // 往远离宠物的方向一点点拖，直到露出一半左右
+    const direction = awayDirection();
+    for (let step = 0; step < 40; step++) {
+      const shifted = currentWindows.find(item => item.id === 'chat')!.bounds;
+      const body = { left: brain.position.x - 80, right: brain.position.x + 80, top: brain.position.y - 140, bottom: brain.position.y + 8 };
+      const overlap = Math.max(0, Math.min(body.right, shifted.right) - Math.max(body.left, shifted.left)) * Math.max(0, Math.min(body.bottom, shifted.bottom) - Math.max(body.top, shifted.top));
+      if (1 - overlap / (160 * 148) > .5) break;
+      dragWindow('chat', direction * 10, 0, 1);
+    }
+    void coverRect;
+    run(3);
+  });
+  resetScene();
+  checkCase('躲着时藏身的窗口被关掉', ['coverGone'], () => {
+    if (!hideBehindChat()) { write('  ⚠ 没能躲到微信窗口后面'); return; }
+    applyWindows(currentWindows.filter(window => window.id !== 'chat'));
+    run(3);
+  });
+  resetScene();
+  checkCase('窗口拖过来盖住它，然后停手', ['windowDropped'], () => {
+    // 把 VS Code 窗口从右边拖过来，停在宠物身上
+    // 每一步都朝宠物现在的位置拖（它可能会注意到你在拖窗口、跑过来看）
+    for (let step = 8; step >= 1; step--) {
+      const code = currentWindows.find(window => window.id === 'code')!;
+      dragWindow('code', (brain.position.x - 200 - code.bounds.left) / step, (brain.position.y - 300 - code.bounds.top) / step, 1);
+    }
+    run(3);
+    write(`     宠物现在：${brain.behavior}，${brain.looseCover ? '躲在窗口下面' : '没躲'}`);
+    run(15);
+  });
+  resetScene();
+  checkCase('站在窗口上，窗口被慢慢拖着走', ['rideSlow'], () => {
+    brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat');
+    run(3);
+    dragWindow('chat', 12, 0, 20);
+    run(2);
+  });
+  checkCase('站在窗口上，窗口被猛拖', ['rideFast'], () => {
+    run(5);
+    if (!brain.surface) { brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); }
+    dragWindow('chat', -230, 0, 3);
+    run(2);
+  });
+  checkCase('站在窗口上，窗口被来回甩', ['shakenOff'], () => {
+    run(5);
+    if (!brain.surface) { brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); }
+    for (let index = 0; index < 8; index++) dragWindow('chat', index % 2 ? -60 : 60, 0, 1);
+    run(4);
+  });
+  resetScene();
+  checkCase('一下子最小化所有窗口（显示桌面）', ['desktopCleared'], () => {
+    applyWindows([]);
+    run(4);
+  });
+  resetScene();
+  checkCase('旁边弹出一个新窗口', ['windowPopped'], () => {
+    brain.setBehavior('sit', 10);
+    const left = brain.position.x + 120;
+    applyWindows([...currentWindows, { id: 'popup', title: '通知', processName: 'Notify.exe', bounds: { left, top: brain.position.y - 300, right: left + 300, bottom: brain.position.y - 100 }, isMaximized: false, isFullscreen: false, monitorId: 'monitor-1', isForeground: false }]);
+    run(3);
+  });
+  resetScene();
+  checkCase('你在拖别的窗口', ['windowDragged'], () => {
+    dragWindow('code', 0, 15, 6);
+    run(3);
+  });
+  resetScene();
+  brain.performAction = originalPerformAction;
+  write();
+
   // ---- 场景四：故意把位置弄坏，看能不能自动复位 ----
   const recoversBefore = recoverReasons.length;
   brain.position = { x: Number.NaN, y: Number.NaN };

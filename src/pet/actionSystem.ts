@@ -32,7 +32,20 @@ export type ActionTrigger =
   | 'reminderIgnored' // 喝水提醒没人理
   | 'customDone'      // 定时提醒点了"做完啦"
   | 'wakeUp'          // 你回到电脑前，把它吵醒
-  | 'trick';          // 右键菜单"表演一个"
+  | 'trick'           // 右键菜单"表演一个"
+  // ---- 桌面上的窗口操作（宠物和窗口的互动）----
+  | 'coverExposed'    // 躲在窗口后面，窗口被慢慢拖开，整个露出来了（被发现了）
+  | 'coverYanked'     // 躲在窗口后面，窗口被猛地拽开
+  | 'coverPartial'    // 躲在窗口后面，窗口被拖开一部分（你停手后才反应）
+  | 'coverReturned'   // 露出来以后，窗口又被拖回来盖住它
+  | 'coverGone'       // 藏身的窗口被关掉或最小化了
+  | 'windowDropped'   // 你把窗口拖到它身上 / 新窗口弹出来盖住了它
+  | 'rideSlow'        // 站在窗口顶上，窗口被慢慢拖着走（坐车）
+  | 'rideFast'        // 站在窗口顶上，窗口被猛拖
+  | 'shakenOff'       // 站在窗口顶上，窗口被来回甩，被甩下来了（落地后）
+  | 'windowDragged'   // 你在拖别的窗口（它看见了）
+  | 'desktopCleared'  // 一下子最小化了所有窗口（显示桌面）
+  | 'windowPopped';   // 旁边突然弹出一个新窗口
 
 /** 猫现在在哪儿 */
 export type CatPlace = 'floor' | 'window' | 'edge' | 'anchored';
