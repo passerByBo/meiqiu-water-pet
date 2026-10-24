@@ -5,14 +5,16 @@ import { HamsterModel } from './models/HamsterModel';
 import { ShibaModel } from './models/ShibaModel';
 import type { PetModel } from './models/PetModel';
 import type { PetSpecies } from './species';
+import { findSkin, type PetSkin } from './skins';
 
-const MODEL_FACTORIES: Record<PetSpecies, () => PetModel> = {
-  cat: () => new BlackCatModel(),
-  hamster: () => new HamsterModel(),
-  shiba: () => new ShibaModel(),
-  goldfish: () => new GoldfishModel(),
+const MODEL_FACTORIES: Record<PetSpecies, (skin: PetSkin) => PetModel> = {
+  cat: skin => new BlackCatModel(skin),
+  hamster: skin => new HamsterModel(skin),
+  shiba: skin => new ShibaModel(skin),
+  goldfish: skin => new GoldfishModel(skin),
 };
 
-export function createPetModel(species: PetSpecies): PetModel {
-  return (MODEL_FACTORIES[species] ?? MODEL_FACTORIES.cat)();
+/** 造一只宠物：skinId 是皮肤（见 skins.ts），找不到就用默认外观 */
+export function createPetModel(species: PetSpecies, skinId?: string): PetModel {
+  return (MODEL_FACTORIES[species] ?? MODEL_FACTORIES.cat)(findSkin(species, skinId));
 }

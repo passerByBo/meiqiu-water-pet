@@ -24,6 +24,16 @@
                  @input="renamePet(($event.target as HTMLInputElement).value)">
         </div>
       </div>
+      <div class="row column">
+        <label>{{ currentPetName }}的外观</label>
+        <div class="skin-grid">
+          <button v-for="skin in currentSkins" :key="skin.id" class="skin-card" :class="{ selected: currentSkinId === skin.id }"
+                  @click="chooseSkin(skin.id)">
+            <span class="skin-swatch" :style="{ background: `linear-gradient(135deg, ${skin.swatch[0]} 0 60%, ${skin.swatch[1]} 60% 100%)` }"></span>
+            <span>{{ skin.name }}</span>
+          </button>
+        </div>
+      </div>
       <p class="hint">换宠物后，喝水记录、统计、设置、已解锁的装扮都还在；每只宠物的心情和亲密度各自记着，换回来时它还记得你。</p>
     </section>
 
@@ -295,6 +305,7 @@ import {
 } from '../shared/backendApi';
 import { catConfig, loadCatConfig, type RewardRule } from '../pet/catConfig';
 import { SPECIES_LIST, speciesInfo } from '../pet/species';
+import { findSkin, SKINS } from '../pet/skins';
 
 const WEEKDAYS = [
   { value: 1, label: '一' }, { value: 2, label: '二' }, { value: 3, label: '三' }, { value: 4, label: '四' },
@@ -336,6 +347,14 @@ const saveStatusText = computed(() => ({
 const currentSpecies = computed(() => speciesInfo(draft.value?.petSpecies));
 /** 现在这只宠物的名字（页面上的"煤球"都换成它） */
 const currentPetName = computed(() => (draft.value?.petNames[draft.value.petSpecies] || '').trim() || currentSpecies.value.defaultName);
+
+// ---- 皮肤（每种动物各记一套） ----
+const currentSkins = computed(() => SKINS[currentSpecies.value.id]);
+const currentSkinId = computed(() => findSkin(currentSpecies.value.id, draft.value?.petSkins?.[currentSpecies.value.id]).id);
+function chooseSkin(skinId: string): void {
+  if (!draft.value) return;
+  draft.value.petSkins = { ...draft.value.petSkins, [currentSpecies.value.id]: skinId };
+}
 
 /** 改当前宠物的名字；清空就恢复默认名字 */
 function renamePet(name: string): void {
@@ -570,6 +589,21 @@ h2 {
 .species-card.selected { border-color: #4fb4f5; background: #f2f9ff; }
 .species-icon { font-size: 28px; }
 .species-label { color: #888; font-size: 12px; }
+.skin-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.skin-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 2px solid #ece9e3;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+.skin-card.selected { border-color: #4fb4f5; background: #f2f9ff; }
+.skin-swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .18); flex-shrink: 0; }
 .presets { display: flex; gap: 8px; margin-left: auto; }
 .summary { margin: 4px 0 0; color: #3a7bd5; }
 .rewards { display: flex; flex-direction: column; gap: 6px; }

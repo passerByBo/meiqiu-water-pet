@@ -2,6 +2,7 @@
 // 全部由代码搭建，所有动作由"姿势参数"驱动（关节结构和旧版一致，动作逻辑不用改）
 import * as THREE from 'three';
 import { clamp, damp, pickRandom, randomBetween } from '../shared/geometry';
+import type { PetSkin } from './skins';
 
 /** 关键姿势：每个姿势定义各关节角度，实际姿势是它们的加权混合 */
 const KEY_POSES = {
@@ -17,15 +18,18 @@ export const POSE_NAMES = Object.keys(KEY_POSES) as KeyPoseName[];
 const JOINT_NAMES = Object.keys(KEY_POSES.stand) as JointName[];
 const TAIL_SEGMENT_COUNT = 12;
 
-// ---------------- 配色 ----------------
-const COLORS = {
+// ---------------- 配色（默认外观：黑猫；皮肤只替换其中一部分，见 skins.ts） ----------------
+export const DEFAULT_COLORS = {
   fur: 0x2a2a36,          // 动漫里的黑猫：深石板色，才看得出明暗
   outline: 0x060609,      // 描边
   rim: 0x9fb6ff,          // 边缘的冷色高光
   pink: 0xff9db3,         // 鼻子、内耳、肉垫
   collar: 0xe8424f,       // 红项圈
   bell: 0xf5c542,         // 金铃铛
+  whisker: 0xffffff,      // 胡须
 };
+/** 默认的黄绿色虹膜（从上到下三段） */
+const DEFAULT_IRIS: [string, string, string] = ['#4f6a0c', '#a8d42c', '#f1ff96'];
 const OUTLINE_THICKNESS = .022;
 /** 项圈前面比后面低多少（弧度）：头和身子的接缝是前低后高的 */
 const COLLAR_FRONT_DROP = .35;
@@ -84,17 +88,17 @@ function createCanvasTexture(draw: (context: CanvasRenderingContext2D, size: num
   return texture;
 }
 
-/** 虹膜：深色描边 + 上深下亮的黄绿渐变 + 内圈阴影 */
-const drawIris = (context: CanvasRenderingContext2D, size: number) => {
+/** 虹膜：深色描边 + 上深下亮的渐变（默认黄绿色，换肤时换颜色） + 内圈阴影 */
+const drawIris = (iris: [string, string, string]) => (context: CanvasRenderingContext2D, size: number) => {
   const center = size / 2;
   context.fillStyle = '#14110a';
   context.beginPath();
   context.arc(center, center, center - 2, 0, Math.PI * 2);
   context.fill();
   const gradient = context.createLinearGradient(0, 14, 0, size - 14);
-  gradient.addColorStop(0, '#4f6a0c');
-  gradient.addColorStop(.45, '#a8d42c');
-  gradient.addColorStop(1, '#f1ff96');
+  gradient.addColorStop(0, iris[0]);
+  gradient.addColorStop(.45, iris[1]);
+  gradient.addColorStop(1, iris[2]);
   context.fillStyle = gradient;
   context.beginPath();
   context.arc(center, center, center - 14, 0, Math.PI * 2);
@@ -135,8 +139,8 @@ const drawCatMouth = (context: CanvasRenderingContext2D, size: number) => {
 };
 
 /** 圆角倒三角的粉鼻子 */
-const drawNose = (context: CanvasRenderingContext2D, size: number) => {
-  context.fillStyle = '#ff9db3';
+const drawNose = (pink: number) => (context: CanvasRenderingContext2D, size: number) => {
+  context.fillStyle = `#${pink.toString(16).padStart(6, '0')}`;
   context.strokeStyle = '#0b0b10';
   context.lineWidth = size * .05;
   context.lineJoin = 'round';
@@ -188,10 +192,10 @@ function createToonGradient(): THREE.DataTexture {
 }
 
 /** 卡通材质 + 边缘冷色高光（动漫里常见的"轮廓光"） */
-function createToonMaterial(color: number, gradientMap: THREE.Texture, rimStrength = .28): THREE.MeshToonMaterial {
+function createToonMaterial(color: number, gradientMap: THREE.Texture, rimStrength = .28, rimColor = DEFAULT_COLORS.rim): THREE.MeshToonMaterial {
   const material = new THREE.MeshToonMaterial({ color, gradientMap });
   material.onBeforeCompile = shader => {
-    shader.uniforms.rimColor = { value: new THREE.Color(COLORS.rim) };
+    shader.uniforms.rimColor = { value: new THREE.Color(rimColor) };
     shader.uniforms.rimStrength = { value: rimStrength };
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec3 rimColor;\nuniform float rimStrength;')
@@ -204,10 +208,10 @@ function createToonMaterial(color: number, gradientMap: THREE.Texture, rimStreng
 }
 
 /** 描边：把模型沿法线方向往外撑一点、只画背面，形成均匀的黑色轮廓线 */
-function createOutlineMaterial(): THREE.ShaderMaterial {
+function createOutlineMaterial(color: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
-      outlineColor: { value: new THREE.Color(COLORS.outline) },
+      outlineColor: { value: new THREE.Color(color) },
       thickness: { value: OUTLINE_THICKNESS },
     },
     vertexShader: `
@@ -267,14 +271,15 @@ export class BlackCatModel {
   private signText = '';
   private readonly cup = new THREE.Group();
 
-  constructor() {
-    // ---------- 材质 ----------
+  constructor(skin?: PetSkin) {
+    // ---------- 材质（颜色 = 默认颜色 + 皮肤替换的部分） ----------
+    const COLORS = { ...DEFAULT_COLORS, ...skin?.colors };
     const toonGradient = createToonGradient();
-    const furMaterial = createToonMaterial(COLORS.fur, toonGradient);
-    const pinkMaterial = createToonMaterial(COLORS.pink, toonGradient, .15);
-    const collarMaterial = createToonMaterial(COLORS.collar, toonGradient, .25);
-    const bellMaterial = createToonMaterial(COLORS.bell, toonGradient, .4);
-    const outlineMaterial = createOutlineMaterial();
+    const furMaterial = createToonMaterial(COLORS.fur, toonGradient, .28, COLORS.rim);
+    const pinkMaterial = createToonMaterial(COLORS.pink, toonGradient, .15, COLORS.rim);
+    const collarMaterial = createToonMaterial(COLORS.collar, toonGradient, .25, COLORS.rim);
+    const bellMaterial = createToonMaterial(COLORS.bell, toonGradient, .4, COLORS.rim);
+    const outlineMaterial = createOutlineMaterial(COLORS.outline);
     const decal = (texture: THREE.Texture, transparent = true) =>
       new THREE.MeshBasicMaterial({ map: texture, transparent, toneMapped: false, depthWrite: false });
     const solidDecal = (color: number) => new THREE.MeshBasicMaterial({ color, toneMapped: false });
@@ -356,7 +361,7 @@ export class BlackCatModel {
     this.head.add(ellipsoid(furMaterial, .19, .15, .17, .17, -.1, .16));  // 右边脸颊
 
     // 五官贴纸
-    this.head.add(sticker(decal(createCanvasTexture(drawNose)), .045, .036, 0, -.035, .386));
+    this.head.add(sticker(decal(createCanvasTexture(drawNose(COLORS.pink))), .045, .036, 0, -.035, .386));
     this.head.add(sticker(decal(createCanvasTexture(drawCatMouth)), .075, .05, 0, -.088, .372));
     this.mouthOpening = sticker(solidDecal(0x6b1f2b), .03, .001, 0, -.1, .371);
     this.head.add(this.mouthOpening);
@@ -365,7 +370,7 @@ export class BlackCatModel {
     for (const side of [-1, 1]) this.head.add(sticker(this.blushMaterial, .075, .042, side * .21, -.065, .32, side * .6));
 
     // 动漫大眼睛：虹膜贴图 + 可移动缩放的竖瞳 + 两个高光 + 眯眼 / 闭眼的弧线
-    const irisMaterial = decal(createCanvasTexture(drawIris));
+    const irisMaterial = decal(createCanvasTexture(drawIris(skin?.catIris ?? DEFAULT_IRIS)));
     const happyArcMaterial = decal(createCanvasTexture(drawArc(true)));
     const closedArcMaterial = decal(createCanvasTexture(drawArc(false)));
     const pupilMaterial = solidDecal(0x07070a);
@@ -395,7 +400,7 @@ export class BlackCatModel {
     }
     const whiskers = new THREE.LineSegments(
       new THREE.BufferGeometry().setFromPoints(whiskerPoints),
-      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, toneMapped: false }),
+      new THREE.LineBasicMaterial({ color: COLORS.whisker, transparent: true, opacity: .55, toneMapped: false }),
     );
     whiskers.raycast = () => {};
     this.head.add(whiskers);

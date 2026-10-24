@@ -3,11 +3,15 @@
 // 没有脖子，头和身子连在一起；平时直立坐着（像参考图），走路时趴下四条腿小碎步。
 // 特有动作 special：把腮帮子塞得鼓鼓的
 import * as THREE from 'three';
+import type { PetSkin } from '../skins';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose } from '../BlackCatModel';
 import { Blinker, createAccessoryMeshes, createAnimeEye, CupProp, EYE_PALETTES, showAccessory, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
-const COLORS = {
+/** 默认外观（奶黄）的颜色；皮肤只替换其中一部分（见 skins.ts） */
+export const DEFAULT_COLORS = {
+  outline: 0x5a3d2b,    // 描边
+  rim: 0xfff1dc,        // 边缘高光
   cream: 0xecbf86,      // 奶黄色的毛（参考图里偏金黄的奶油色）
   earOuter: 0xd99f68,   // 耳朵外侧（比身上深一点）
   white: 0xfff8ee,      // 白肚皮、白脸颊
@@ -78,8 +82,9 @@ export class HamsterModel implements PetModel {
   private readonly cup: CupProp;
   private readonly accessories: Record<string, THREE.Group>;
 
-  constructor() {
-    const builder = new ModelBuilder({ outlineColor: 0x5a3d2b, outlineThickness: .018, rimColor: 0xfff1dc });
+  constructor(skin?: PetSkin) {
+    const COLORS = { ...DEFAULT_COLORS, ...skin?.colors };
+    const builder = new ModelBuilder({ outlineColor: COLORS.outline, outlineThickness: .018, rimColor: COLORS.rim });
     const cream = builder.toon(COLORS.cream, .22);
     const white = builder.toon(COLORS.white, .15);
     const pink = builder.toon(COLORS.pink, .12);
@@ -112,7 +117,7 @@ export class HamsterModel implements PetModel {
     for (const side of [-1, 1]) this.head.add(builder.sticker(this.blushMaterial, .075, .042, side * .24, -.07, .33, side * .6));
     // 亮晶晶的大眼睛（深咖啡红，像黑葡萄；参考图里眼睛又大又亮）
     for (const side of [-1, 1]) {
-      const eye = createAnimeEye(builder, .1, side, EYE_PALETTES.hamster);
+      const eye = createAnimeEye(builder, .1, side, { ...EYE_PALETTES.hamster, ...skin?.eyes });
       eye.group.position.set(side * .165, .05, .343);
       eye.group.rotation.set(-.05, side * .45, 0);
       this.head.add(eye.group);
@@ -126,7 +131,7 @@ export class HamsterModel implements PetModel {
     }
     this.head.add(builder.whiskers(whiskerSegments, .7));
     // 头顶两根呆毛：从头顶冒出来，往外弯一个小弧（用细描边，不然线条太粗）
-    const hairBuilder = new ModelBuilder({ outlineColor: 0x5a3d2b, outlineThickness: .006, rimColor: 0xfff1dc });
+    const hairBuilder = new ModelBuilder({ outlineColor: COLORS.outline, outlineThickness: .006, rimColor: COLORS.rim });
     const hairMaterial = hairBuilder.toon(COLORS.earOuter, .2);
     const hairCurves = [
       [new THREE.Vector3(-.02, .33, .04), new THREE.Vector3(-.035, .42, .07), new THREE.Vector3(-.01, .5, .05), new THREE.Vector3(.04, .51, .01)],

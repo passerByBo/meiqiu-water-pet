@@ -3,11 +3,22 @@
 // 没有腿，悬浮在空中游：平时轻轻上下浮动、尾巴慢慢飘；移动时摆尾巴、身子左右扭；睡觉时沉低一点、鳍慢下来。
 // 特有动作 special：张嘴吐泡泡
 import * as THREE from 'three';
+import type { PetSkin } from '../skins';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose } from '../BlackCatModel';
 import { Blinker, createAccessoryMeshes, createAnimeEye, CupProp, EYE_PALETTES, showAccessory, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
-const COLORS = {
+/** 默认外观（熊猫狮头）的颜色；皮肤只替换其中一部分（见 skins.ts） */
+export const DEFAULT_COLORS = {
+  outline: 0x07070b,    // 描边
+  rim: 0xa9cbff,        // 边缘高光
+  scaleOutline: 0x040407, // 鳞片的描边和高光
+  scaleRim: 0xbcd2ff,
+  gillRed: 0xd23a4c,    // 鳃缝里的红色
+  finRoot: 0x101018,    // 鳍：根部 → 中间 → 末梢（越往外越透明），鳍条
+  finMiddle: 0x1a1826,
+  finTip: 0x463e60,
+  finRay: 0x8c82af,
   body: 0x1b1b25,       // 黑色身子
   scale: 0x20202c,      // 鳞片：只比身子亮一丁点，靠边缘一点点冷色高光看出一片一片
   head: 0xfff4ea,       // 白色的头、头后面的白圈
@@ -20,15 +31,18 @@ const BUBBLE_COUNT = 4;
 const NON_DAMPED = new Set(['rollAngle', 'cupPush']);
 const FAST = new Set(['squint', 'mouthOpen', 'eyeOpen', 'pupilWidth', 'airborne', 'special']);
 
-/** 鳍的贴图：根部深、末梢渐渐变透明，带一条条从根部放射出去的鳍条 */
-const drawFin = (context: CanvasRenderingContext2D, size: number) => {
+/** 0xRRGGBB → 'rgba(r, g, b, alpha)' */
+const toRgba = (color: number, alpha: number) => `rgba(${color >> 16 & 255}, ${color >> 8 & 255}, ${color & 255}, ${alpha})`;
+
+/** 鳍的贴图：根部深、末梢渐渐变透明，带一条条从根部放射出去的鳍条（颜色跟着皮肤） */
+const drawFin = (colors: typeof DEFAULT_COLORS) => (context: CanvasRenderingContext2D, size: number) => {
   const gradient = context.createLinearGradient(0, 0, size, 0);
-  gradient.addColorStop(0, 'rgba(16, 16, 24, 1)');
-  gradient.addColorStop(.6, 'rgba(26, 24, 38, .93)');
-  gradient.addColorStop(1, 'rgba(70, 62, 96, .45)');
+  gradient.addColorStop(0, toRgba(colors.finRoot, 1));
+  gradient.addColorStop(.6, toRgba(colors.finMiddle, .93));
+  gradient.addColorStop(1, toRgba(colors.finTip, .45));
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
-  context.strokeStyle = 'rgba(140, 130, 175, .28)';
+  context.strokeStyle = toRgba(colors.finRay, .28);
   context.lineWidth = size * .01;
   for (let index = 0; index <= 14; index++) {
     const endY = index / 14 * size;
@@ -140,12 +154,17 @@ export class GoldfishModel implements PetModel {
   private readonly cup: CupProp;
   private readonly accessories: Record<string, THREE.Group>;
 
-  constructor() {
-    const builder = new ModelBuilder({ outlineColor: 0x07070b, outlineThickness: .018, rimColor: 0xa9cbff });
+  /** 这套皮肤的颜色（默认颜色 + 皮肤替换的部分） */
+  private readonly colors: typeof DEFAULT_COLORS;
+
+  constructor(skin?: PetSkin) {
+    const COLORS = { ...DEFAULT_COLORS, ...skin?.colors };
+    this.colors = COLORS;
+    const builder = new ModelBuilder({ outlineColor: COLORS.outline, outlineThickness: .018, rimColor: COLORS.rim });
     const bodyMaterial = builder.toon(COLORS.body, .5);
     const headMaterial = builder.toon(COLORS.head, .12, 0xffffff);
     const wenMaterial = builder.toon(COLORS.wen, .12, 0xffffff);
-    const finMaterial = new THREE.MeshBasicMaterial({ map: createCanvasTexture(drawFin), transparent: true, side: THREE.DoubleSide, toneMapped: false, depthWrite: false });
+    const finMaterial = new THREE.MeshBasicMaterial({ map: createCanvasTexture(drawFin(COLORS)), transparent: true, side: THREE.DoubleSide, toneMapped: false, depthWrite: false });
 
     this.shadow = builder.shadow(.9, 1.1);
     this.root.add(this.shadow, this.swim);
@@ -180,7 +199,7 @@ export class GoldfishModel implements PetModel {
 
     // 圆溜溜的大眼睛：朝前、带高光，正面看是一副乖巧的样子
     for (const side of [-1, 1]) {
-      const eye = createAnimeEye(builder, .082, side, EYE_PALETTES.goldfish);
+      const eye = createAnimeEye(builder, .082, side, { ...EYE_PALETTES.goldfish, ...skin?.eyes });
       eye.group.position.set(side * .15, .06, .492);
       eye.group.rotation.set(-.05, side * .42, 0);
       this.fish.add(eye.group);
@@ -270,8 +289,8 @@ export class GoldfishModel implements PetModel {
    */
   private addGills(): void {
     const gillBuilder = new ModelBuilder({ outlineColor: 0x3a3440, outlineThickness: .007, rimColor: 0xffffff });
-    const gillMaterial = gillBuilder.toon(COLORS.head, .12, 0xffffff);
-    const redGillMaterial = gillBuilder.toon(0xd23a4c, .2, 0xffffff);
+    const gillMaterial = gillBuilder.toon(this.colors.head, .12, 0xffffff);
+    const redGillMaterial = gillBuilder.toon(this.colors.gillRed, .2, 0xffffff);
     for (const side of [-1, 1]) {
       // 鳃在头和身子交接的那道折痕上（这里是最外面的一层，不会被头或身子盖住），偏下一点；朝外、稍微朝后
       const point = new THREE.Vector3(side * .287, -.02, .17);
@@ -342,8 +361,8 @@ export class GoldfishModel implements PetModel {
    * 并且后边缘往外翘一点，所以前一排的后边缘正好盖住后一排的前半片；只长在白圈后面的黑色身子两侧
    */
   private addScales(): void {
-    const scaleBuilder = new ModelBuilder({ outlineColor: 0x040407, outlineThickness: .006, rimColor: 0xbcd2ff });
-    const scaleMaterial = scaleBuilder.toon(COLORS.scale, .45);
+    const scaleBuilder = new ModelBuilder({ outlineColor: this.colors.scaleOutline, outlineThickness: .006, rimColor: this.colors.scaleRim });
+    const scaleMaterial = scaleBuilder.toon(this.colors.scale, .45);
     const bodyCenter = new THREE.Vector3(0, 0, -.1);
     const bodyRadii = new THREE.Vector3(.34, .35, .44);
     const outward = new THREE.Vector3(0, 0, 1);

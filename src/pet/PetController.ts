@@ -17,7 +17,8 @@ import { catConfig, lineKindOf, loadCatConfig, type RewardRule } from './catConf
 import { chooseDialogueGroup, type DialogueContext } from './dialogueSelector';
 import { DailyRoutine, type RoutineEvent } from './dailyRoutine';
 import { actionLibrary } from './actionSystem';
-import { adaptTextToSpecies, speciesInfo, type PetSpecies, type SpeciesInfo } from './species';
+import { adaptTextToSpecies, SPECIES_LIST, speciesInfo, type PetSpecies, type SpeciesInfo } from './species';
+import { findSkin, SKINS } from './skins';
 import {
   backendApi, type AppSettings, type CursorPayload, type CustomReminderFiredPayload, type DesktopLayoutPayload, type MoodLevel,
   type ReminderFiredPayload, type RoamMode, type Statistics,
@@ -139,7 +140,8 @@ export class PetController {
     await Promise.all([loadCatConfig(), actionLibrary.load()]);
     console.info(`动作库：${actionLibrary.count} 个动作`);
     const settings = await backendApi.getSettings();
-    await this.switchSpecies(speciesInfo(settings.petSpecies).id, false);
+    const startSpecies = speciesInfo(settings.petSpecies).id;
+    await this.switchSpecies(startSpecies, findSkin(startSpecies, settings.petSkins?.[startSpecies]).id, false);
     this.applySettings(settings);
     const mood = await backendApi.getCatMood();
     this.brain.intimacy = mood.intimacy;
@@ -166,8 +168,11 @@ export class PetController {
     if (previousRoamMode && settings.defaultRoamMode !== previousRoamMode && settings.defaultRoamMode !== this.brain.roamMode) {
       this.brain.setRoamMode(settings.defaultRoamMode);
     }
-    // 设置里换了宠物：马上换模型、换声音、换口吻
-    if (speciesInfo(settings.petSpecies).id !== this.scene.species) void this.switchSpecies(speciesInfo(settings.petSpecies).id, true);
+    // 设置里换了宠物：马上换模型、换声音、换口吻；只换了皮肤：换个外观，开心地展示一下
+    const targetSpecies = speciesInfo(settings.petSpecies).id;
+    const targetSkin = findSkin(targetSpecies, settings.petSkins?.[targetSpecies]);
+    if (targetSpecies !== this.scene.species) void this.switchSpecies(targetSpecies, targetSkin.id, true);
+    else if (targetSkin.id !== this.scene.skinId) this.changeSkin(targetSkin.id, targetSkin.name);
     catVoice.isEnabled = settings.voiceEnabled;
     catVoice.mode = settings.voiceMode;
     catVoice.volume = settings.voiceVolume / 100;
@@ -194,8 +199,8 @@ export class PetController {
    * 换一种宠物：换 3D 模型、换叫声和语音、换动作库里的特有动作。
    * 喝水数据大家共用；心情和亲密度由后端按动物分开记（换了之后会推送这只动物自己的心情）
    */
-  private async switchSpecies(species: PetSpecies, shouldGreet: boolean): Promise<void> {
-    const model = this.scene.setSpecies(species);
+  private async switchSpecies(species: PetSpecies, skinId: string, shouldGreet: boolean): Promise<void> {
+    const model = this.scene.setSpecies(species, skinId);
     this.brain.species = species;
     this.brain.hasLegs = speciesInfo(species).hasLegs;
     if (this.settings) model.setAccessory(this.settings.equippedAccessory);
@@ -204,6 +209,14 @@ export class PetController {
       this.brain.setBehavior('happy', 2);
       this.effects.say(`我是${this.petName}！以后由我陪你喝水～`, 3500);
     }
+  }
+
+  /** 同一只宠物换一套皮肤：换模型外观（装扮照旧），开心地转一圈给你看 */
+  private changeSkin(skinId: string, skinName: string): void {
+    const model = this.scene.setSpecies(this.scene.species, skinId);
+    if (this.settings) model.setAccessory(this.settings.equippedAccessory);
+    this.brain.setBehavior('happy', 2);
+    this.effects.say(`换上「${skinName}」啦，好看吗？`, 3000);
   }
 
   /**
@@ -593,6 +606,23 @@ export class PetController {
       { id: 'zoomies', icon: '💨', label: '撒个欢', run: () => void this.brain.tryStartMischief('zoomies') },
       { id: 'trick', icon: '🎲', label: '表演一个小动作', run: () => { if (!this.brain.performTrick()) this.effects.say('现在不想表演嘛…'); } },
       { type: 'separator' },
+      {
+        type: 'submenu', id: 'switchPet', icon: '🐾', label: '换宠物',
+        entries: SPECIES_LIST.map(species => ({
+          id: `pet-${species.id}`, icon: species.icon, label: `${this.settings?.petNames?.[species.id] || species.defaultName}（${species.label}）`,
+          isChecked: () => this.scene.species === species.id,
+          run: () => void this.saveAppearance({ petSpecies: species.id }),
+        })),
+      },
+      {
+        type: 'submenu', id: 'switchSkin', icon: '🎨', label: '换肤',
+        entries: SKINS[this.scene.species].map(skin => ({
+          id: `skin-${skin.id}`, icon: skin.icon, label: skin.name,
+          isChecked: () => this.scene.skinId === skin.id,
+          run: () => void this.saveAppearance({ petSkins: { ...this.settings?.petSkins, [this.scene.species]: skin.id } }),
+        })),
+      },
+      { type: 'separator' },
       roamSkill('roamFree', '🐾', '自由散步', 'free'),
       roamSkill('roamAnchored', '📌', '待在这里别动', 'anchored'),
       roamSkill('roamEdge', '⬇', '去屏幕边缘待着', 'edge'),
@@ -604,6 +634,12 @@ export class PetController {
       { id: 'screenshot', icon: '📷', label: '截屏', comingSoon: true },
       { id: 'aiChat', icon: '💬', label: 'AI 对话', comingSoon: true },
     ];
+  }
+
+  /** 右键菜单换宠物 / 换肤：保存到设置（退出再打开还是它），换模型由 applySettings 统一处理 */
+  private async saveAppearance(change: Partial<AppSettings>): Promise<void> {
+    if (!this.settings) return;
+    this.applySettings(await backendApi.updateSettings({ ...this.settings, ...change }));
   }
 
   /** 右键菜单换活动方式：马上生效，并保存成默认活动方式（退出再打开还是它） */

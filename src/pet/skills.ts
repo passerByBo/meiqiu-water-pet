@@ -1,5 +1,5 @@
-// 技能菜单（右键猫弹出）：所有技能统一在这里注册，以后加截屏、AI 对话只需要加一项
-import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu';
+// 技能菜单（右键宠物弹出）：所有技能统一在这里注册，以后加截屏、AI 对话只需要加一项
+import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from '@tauri-apps/api/menu';
 
 export interface CatSkill {
   id: string;
@@ -13,19 +13,36 @@ export interface CatSkill {
   comingSoon?: boolean;
 }
 
-export type SkillMenuEntry = CatSkill | { type: 'separator' };
+/** 子菜单（例如"换宠物"下面列出所有宠物） */
+export interface SkillSubmenu {
+  type: 'submenu';
+  id: string;
+  icon: string;
+  label: string;
+  entries: SkillMenuEntry[];
+}
 
-const isSeparator = (entry: SkillMenuEntry): entry is { type: 'separator' } => 'type' in entry;
+export type SkillMenuEntry = CatSkill | SkillSubmenu | { type: 'separator' };
 
-/** 用系统原生菜单弹出技能列表（原生菜单可以超出猫咪窗口的范围） */
-export async function showSkillMenu(entries: SkillMenuEntry[], onComingSoon: (skill: CatSkill) => void): Promise<void> {
-  const items = await Promise.all(entries.map(entry => {
-    if (isSeparator(entry)) return PredefinedMenuItem.new({ item: 'Separator' });
-    const text = `${entry.icon}  ${entry.label}${entry.comingSoon ? '（即将推出）' : ''}`;
-    const action = () => (entry.comingSoon ? onComingSoon(entry) : entry.run?.());
-    if (entry.isChecked) return CheckMenuItem.new({ id: entry.id, text, checked: entry.isChecked(), action });
-    return MenuItem.new({ id: entry.id, text, action });
+type NativeMenuItem = MenuItem | CheckMenuItem | PredefinedMenuItem | Submenu;
+
+/** 把一组菜单项转成系统原生菜单项（子菜单递归转换） */
+async function buildItems(entries: SkillMenuEntry[], onComingSoon: (skill: CatSkill) => void): Promise<NativeMenuItem[]> {
+  return Promise.all(entries.map(async (entry): Promise<NativeMenuItem> => {
+    if ('type' in entry && entry.type === 'separator') return PredefinedMenuItem.new({ item: 'Separator' });
+    if ('type' in entry && entry.type === 'submenu') {
+      return Submenu.new({ id: entry.id, text: `${entry.icon}  ${entry.label}`, items: await buildItems(entry.entries, onComingSoon) });
+    }
+    const skill = entry as CatSkill;
+    const text = `${skill.icon}  ${skill.label}${skill.comingSoon ? '（即将推出）' : ''}`;
+    const action = () => (skill.comingSoon ? onComingSoon(skill) : skill.run?.());
+    if (skill.isChecked) return CheckMenuItem.new({ id: skill.id, text, checked: skill.isChecked(), action });
+    return MenuItem.new({ id: skill.id, text, action });
   }));
-  const menu = await Menu.new({ items });
+}
+
+/** 用系统原生菜单弹出技能列表（原生菜单可以超出宠物窗口的范围） */
+export async function showSkillMenu(entries: SkillMenuEntry[], onComingSoon: (skill: CatSkill) => void): Promise<void> {
+  const menu = await Menu.new({ items: await buildItems(entries, onComingSoon) });
   await menu.popup();
 }

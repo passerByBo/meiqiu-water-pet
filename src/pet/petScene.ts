@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CAT_CANVAS_SIZE } from './constants';
 import type { PetSpecies } from './species';
 import { createPetModel } from './speciesModels';
+import { DEFAULT_SKIN_ID } from './skins';
 import type { PetModel } from './models/PetModel';
 import type { Point } from '../shared/geometry';
 
@@ -10,6 +11,8 @@ export class PetScene {
   /** 现在显示的宠物模型 */
   petModel: PetModel;
   species: PetSpecies;
+  /** 现在的皮肤 id（见 skins.ts） */
+  skinId: string;
   /** 脚底中心（世界坐标原点）投影到画布上的像素位置，用来把宠物对齐到它在桌面上的位置 */
   readonly groundPointOnCanvas: Point;
 
@@ -19,7 +22,7 @@ export class PetScene {
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointerNdc = new THREE.Vector2();
 
-  constructor(canvas: HTMLCanvasElement, species: PetSpecies = 'cat') {
+  constructor(canvas: HTMLCanvasElement, species: PetSpecies = 'cat', skinId = DEFAULT_SKIN_ID) {
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(CAT_CANVAS_SIZE, CAT_CANVAS_SIZE);
@@ -41,7 +44,8 @@ export class PetScene {
     this.scene.add(keyLight, rimLightLeft, rimLightRight);
 
     this.species = species;
-    this.petModel = createPetModel(species);
+    this.skinId = skinId;
+    this.petModel = createPetModel(species, skinId);
     this.scene.add(this.petModel.root);
 
     const projected = new THREE.Vector3(0, 0, 0).project(this.camera);
@@ -51,13 +55,14 @@ export class PetScene {
     };
   }
 
-  /** 换成另一种动物：拿掉旧模型、放上新模型（所有动物的脚底都在原点，位置不用变） */
-  setSpecies(species: PetSpecies): PetModel {
-    if (species === this.species) return this.petModel;
+  /** 换成另一种动物或另一套皮肤：拿掉旧模型、放上新模型（所有动物的脚底都在原点，位置不用变） */
+  setSpecies(species: PetSpecies, skinId = DEFAULT_SKIN_ID): PetModel {
+    if (species === this.species && skinId === this.skinId) return this.petModel;
     this.scene.remove(this.petModel.root);
     disposeObject(this.petModel.root);
     this.species = species;
-    this.petModel = createPetModel(species);
+    this.skinId = skinId;
+    this.petModel = createPetModel(species, skinId);
     this.scene.add(this.petModel.root);
     return this.petModel;
   }

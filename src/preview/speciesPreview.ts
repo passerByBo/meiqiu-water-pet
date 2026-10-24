@@ -1,5 +1,6 @@
 // 宠物造型预览（只在开发时用，打开 http://localhost:1420/species-preview.html）：
 // 四种动物 × 七种姿势排在一起，方便检查和调整造型。
+// ?skins=1：每种动物的每套皮肤一行（坐着 / 走路 / 特有动作 / 装扮），检查换肤效果
 // 整页只用一个 WebGL 渲染器（浏览器对 WebGL 数量有限制），按格子分区域渲染
 import * as THREE from 'three';
 import { BlackCatModel, createDefaultPose, POSE_NAMES, type CatPose } from '../pet/BlackCatModel';
@@ -7,6 +8,9 @@ import { HamsterModel } from '../pet/models/HamsterModel';
 import { ShibaModel } from '../pet/models/ShibaModel';
 import { GoldfishModel } from '../pet/models/GoldfishModel';
 import type { PetModel } from '../pet/models/PetModel';
+import { SKINS } from '../pet/skins';
+import type { PetSpecies } from '../pet/species';
+import { createPetModel } from '../pet/speciesModels';
 
 // 网址参数：?only=1 只看第 2 种动物；?cell=360 把格子放大（检查细节用）
 const searchParams = new URLSearchParams(window.location.search);
@@ -21,6 +25,7 @@ interface SpecialMove {
 }
 
 interface Species {
+  id: PetSpecies;
   name: string;
   create: () => PetModel;
   /** 特有动作（预览里每 4 秒轮换一个） */
@@ -43,26 +48,33 @@ interface PoseColumn {
 const only = (pose: CatPose, name: (typeof POSE_NAMES)[number]) => { POSE_NAMES.forEach(item => { pose[item] = 0; }); pose[name] = 1; };
 
 const ALL_SPECIES: Species[] = [
-  { name: '🐈‍⬛ 煤球\n黑猫', create: () => new BlackCatModel(), specials: [
+  { id: 'cat', name: '🐈‍⬛ 煤球\n黑猫', create: () => new BlackCatModel(), specials: [
     { title: '舔爪洗脸', apply: pose => { only(pose, 'sit'); pose.groom = 1; pose.squint = .6; } },
   ] },
-  { name: '🐹 团子\n仓鼠', create: () => new HamsterModel(), specials: [
+  { id: 'hamster', name: '🐹 团子\n仓鼠', create: () => new HamsterModel(), specials: [
     { title: '鼓腮帮子', apply: pose => { only(pose, 'sit'); pose.special = 1; pose.squint = .7; } },
   ] },
-  { name: '🐕 小柴\n柴犬', create: () => new ShibaModel(), specials: [
+  { id: 'shiba', name: '🐕 小柴\n柴犬', create: () => new ShibaModel(), specials: [
     { title: '作揖拜拜', apply: pose => { only(pose, 'sit'); pose.special = 1; pose.squint = .9; pose.tailSwing = .9; pose.tailSpeed = 6; pose.earBack = .2; } },
     { title: '赖地耍赖', apply: pose => { only(pose, 'lie'); pose.special2 = 1; pose.eyeOpen = .45; pose.earBack = .6; pose.tailLift = -.2; } },
     { title: '螺旋桨尾巴', apply: pose => { only(pose, 'stand'); pose.special3 = 1; pose.squint = 1; pose.tailLift = 1.2; } },
   ] },
-  { name: '🐟 墨墨\n金鱼', create: () => new GoldfishModel(), specials: [
+  { id: 'goldfish', name: '🐟 墨墨\n金鱼', create: () => new GoldfishModel(), specials: [
     { title: '吐泡泡', apply: pose => { only(pose, 'sit'); pose.special = 1; } },
   ] },
 ];
 
 const onlyIndex = searchParams.get('only');
-const SPECIES = onlyIndex === null ? ALL_SPECIES : [ALL_SPECIES[Number(onlyIndex)]];
+const isSkinMode = searchParams.get('skins') === '1';
+const CHOSEN_SPECIES = onlyIndex === null ? ALL_SPECIES : [ALL_SPECIES[Number(onlyIndex)]];
+// 换肤模式：每套皮肤展开成一行（名字只留图标 + 皮肤名）
+const SPECIES: Species[] = isSkinMode
+  ? CHOSEN_SPECIES.flatMap(species => SKINS[species.id].map(skin => ({
+    ...species, name: `${species.name.split(' ')[0]}\n${skin.name}`, create: () => createPetModel(species.id, skin.id),
+  })))
+  : CHOSEN_SPECIES;
 
-const COLUMNS: PoseColumn[] = [
+const ALL_COLUMNS: PoseColumn[] = [
   { title: '坐着看你', background: 'light', yaw: .35, setPose: pose => { only(pose, 'sit'); pose.tailLift = .3; } },
   { title: '走路 / 游', background: 'light', yaw: Math.PI / 2, isWalking: true, setPose: pose => { only(pose, 'stand'); pose.tailLift = .95; pose.tailSwing = .2; pose.tailSpeed = 4; } },
   { title: '开心', background: 'blue', yaw: 0, setPose: pose => { only(pose, 'sit'); pose.squint = 1; pose.tailLift = 1.3; pose.headRoll = .2; pose.bounce = 1; pose.tailSwing = .8; pose.tailSpeed = 7; } },
@@ -72,6 +84,8 @@ const COLUMNS: PoseColumn[] = [
   { title: '旋转一圈', background: 'light', yaw: 0, isTurntable: true, setPose: pose => { only(pose, 'sit'); pose.tailLift = .5; } },
   { title: '装扮（轮换）', background: 'light', yaw: .3, isAccessory: true, setPose: pose => { only(pose, 'sit'); pose.tailLift = .5; } },
 ];
+const SKIN_MODE_COLUMNS = ['坐着看你', '走路 / 游', '特有动作', '装扮（轮换）'];
+const COLUMNS = isSkinMode ? ALL_COLUMNS.filter(column => SKIN_MODE_COLUMNS.includes(column.title)) : ALL_COLUMNS;
 
 // ---- 页面上的格子（背景和文字），3D 画在上面盖着的一张大画布上 ----
 const grid = document.getElementById('grid')!;

@@ -167,6 +167,8 @@ pub struct Settings {
     pub pet_species: String,
     /// 每种动物的名字（没改过的用默认名字：煤球 / 团子 / 小柴 / 墨墨）
     pub pet_names: HashMap<String, String>,
+    /// 每种动物现在用的皮肤 id（没选过的用默认外观；有哪些皮肤由前端的 skins.ts 决定）
+    pub pet_skins: HashMap<String, String>,
 
     // ---- 主人 ----
     /// 怎么称呼主人（气泡文字里用，空着就叫"你"）
@@ -230,6 +232,7 @@ impl Default for Settings {
         Settings {
             pet_species: "cat".into(),
             pet_names: HashMap::new(),
+            pet_skins: HashMap::new(),
             owner_name: String::new(),
             work_hours: TimePeriod { enabled: true, start: "09:00".into(), end: "17:30".into() },
             work_weekdays: vec![1, 2, 3, 4, 5],
@@ -305,6 +308,13 @@ impl Settings {
             .map(|(species, name)| (species, name.trim().chars().filter(|character| !character.is_control()).take(8).collect::<String>()))
             .filter(|(_, name)| !name.is_empty())
             .collect();
+        // 皮肤：只保留认识的动物，皮肤 id 只允许小写字母、数字和横线（最多 32 个字符）
+        self.pet_skins.retain(|species, skin_id| {
+            PET_SPECIES.contains(&species.as_str())
+                && !skin_id.is_empty()
+                && skin_id.len() <= 32
+                && skin_id.chars().all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-')
+        });
         self.work_hours = self.work_hours.sanitized("09:00", "17:30");
         self.lunch_break = self.lunch_break.sanitized("11:30", "13:00");
         self.work_weekdays.retain(|day| (1..=7).contains(day));

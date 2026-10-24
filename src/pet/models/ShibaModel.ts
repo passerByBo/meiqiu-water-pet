@@ -3,11 +3,15 @@
 // 骨架和猫一样（四条腿 + 脖子 + 头），腿更长一点，嘴巴往前突出。
 // 特有动作：special 作揖拜拜 / special2 赖地耍赖 / special3 螺旋桨尾巴扭屁股（开心地张嘴吐一点舌头）
 import * as THREE from 'three';
+import type { PetSkin } from '../skins';
 import type { PetModel, PetPose } from './PetModel';
 import { createDefaultPose, POSE_NAMES } from '../BlackCatModel';
 import { Blinker, createAccessoryMeshes, createAnimeEye, CupProp, EYE_PALETTES, showAccessory, createCanvasTexture, dampPose, drawBlush, ModelBuilder, SignProp, updateEyes, type PetEye } from './modelToolkit';
 
-const COLORS = {
+/** 默认外观（赤柴）的颜色；皮肤只替换其中一部分（见 skins.ts） */
+export const DEFAULT_COLORS = {
+  outline: 0x3a1f10,    // 描边
+  rim: 0xffe7c8,        // 边缘高光
   fur: 0xd8742c,        // 赤褐色（参考图里偏红的橘棕色）
   cream: 0xfff4e6,      // 里白
   earInner: 0xf3cdb4,
@@ -87,8 +91,9 @@ export class ShibaModel implements PetModel {
   private readonly cup: CupProp;
   private readonly accessories: Record<string, THREE.Group>;
 
-  constructor() {
-    const builder = new ModelBuilder({ outlineColor: 0x3a1f10, outlineThickness: .023, rimColor: 0xffe7c8 });
+  constructor(skin?: PetSkin) {
+    const COLORS = { ...DEFAULT_COLORS, ...skin?.colors };
+    const builder = new ModelBuilder({ outlineColor: COLORS.outline, outlineThickness: .023, rimColor: COLORS.rim });
     const fur = builder.toon(COLORS.fur, .12);   // 轮廓光弱一点，毛色才不会被冲淡
     const cream = builder.toon(COLORS.cream, .08);
 
@@ -164,7 +169,7 @@ export class ShibaModel implements PetModel {
     for (const side of [-1, 1]) this.head.add(builder.sticker(this.blushMaterial, .065, .038, side * .25, -.06, .3, side * .6));
     // 琥珀色的大眼睛 + 奶白色豆豆眉
     for (const side of [-1, 1]) {
-      const eye = createAnimeEye(builder, .084, side, EYE_PALETTES.shiba);
+      const eye = createAnimeEye(builder, .084, side, { ...EYE_PALETTES.shiba, ...skin?.eyes });
       eye.group.position.set(side * .15, .05, .342);
       eye.group.rotation.set(-.05, side * .42, 0);
       this.head.add(eye.group);

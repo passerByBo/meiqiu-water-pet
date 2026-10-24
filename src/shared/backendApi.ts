@@ -166,6 +166,8 @@ export interface AppSettings {
   petSpecies: 'cat' | 'hamster' | 'shiba' | 'goldfish';
   /** 每种动物的名字（没改过的不在里面，用默认名字） */
   petNames: Partial<Record<'cat' | 'hamster' | 'shiba' | 'goldfish', string>>;
+  /** 每种动物现在用的皮肤 id（没有就是默认外观，见 pet/skins.ts） */
+  petSkins: Partial<Record<'cat' | 'hamster' | 'shiba' | 'goldfish', string>>;
   /** 怎么称呼主人（空着就叫"你"） */
   ownerName: string;
   // 作息
