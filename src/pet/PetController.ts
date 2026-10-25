@@ -964,7 +964,7 @@ export class PetController {
       float: (text, position) => {
         const element = document.createElement('div');
         element.className = 'floating-effect';
-        element.textContent = text;
+        element.textContent = adaptTextToSpecies(text, this.species);
         element.style.left = `${position.x - this.windowOrigin.x + randomBetween(-5, 25)}px`;
         element.style.top = `${position.y - this.windowOrigin.y - 40}px`;
         element.style.setProperty('--drift-x', `${randomBetween(-10, 25)}px`);

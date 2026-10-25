@@ -996,6 +996,7 @@ export class CatBrain {
     const window = this.looseCoverWindow;
     if (!window) return; // 窗口没了由布局变化处理
     const isWindowMoving = this.windowMotion.isMoving(window.id, this.elapsedSeconds);
+    if (this.reminder) cover.isWaitingForSettle = false; // 提醒的时候不对窗口变化分心
     if (cover.isWaitingForSettle && !isWindowMoving) {
       cover.isWaitingForSettle = false;
       const isFirstSettle = !cover.hasSettled;
@@ -1192,6 +1193,15 @@ export class CatBrain {
     this.zoomiesLeft = 0;
     this.followSecondsLeft = 0;
     if (this.peek) { this.exitPeek(() => this.startRemind(request)); return; }
+    if (this.looseCover) {
+      // 原地躲在窗口后面：先走出来（走出来的路上照样被窗口挡着），再去提醒
+      const cellIndex = this.freeSpaceMap.freeCellCount > 0 ? this.freeSpaceMap.nearestFreeCell(this.position.x, this.position.y) : -1;
+      if (cellIndex >= 0) {
+        this.moveAlong([this.freeSpaceMap.cellCenter(cellIndex)], RUN_SPEED, 'goRemind', () => { this.looseCover = null; this.startRemind(request); });
+        return;
+      }
+      this.looseCover = null;
+    }
 
     const arrive = () => {
       this.setBehavior('remindWaiting');
@@ -1233,7 +1243,8 @@ export class CatBrain {
         if (this.surface) { arrive(); return; }
         if (this.isOnEdge) break;
         const focusPoint = this.cursor.x > -1000 ? this.cursor : { x: this.desktop.workArea.right / 2, y: this.desktop.workArea.bottom / 2 };
-        this.moveAlong(this.freeSpaceMap.planToward(this.position, focusPoint, 320), WALK_SPEED, 'goRemind', arrive);
+        // 轻柔提醒：不跑，但走得比平时散步快一点（绕开窗口的路可能很长，太慢了你要等很久）
+        this.moveAlong(this.freeSpaceMap.planToward(this.position, focusPoint, 320), WALK_SPEED * 1.4, 'goRemind', arrive);
         return;
       }
       case 'lively':

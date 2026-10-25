@@ -2,7 +2,7 @@
 // 用一个假桌面（两个窗口）让猫的大脑以 30 帧/秒快速跑几个小时的"模拟时间"，
 // 在不同心情、作息、位置下统计选了哪些动作，再逐个触发摸摸、抱抱、逗猫、吓唬、喝水等反应，
 // 同时检查：有没有出错、位置有没有坏、有没有触发"卡住复位"。
-import { CatBrain, type CatEffects } from '../pet/CatBrain';
+import { CatBrain, type CatEffects, type ReminderStyle } from '../pet/CatBrain';
 import { DesktopLayout } from '../pet/DesktopLayout';
 import { FreeSpaceMap } from '../pet/FreeSpaceMap';
 import { PeekPlanner } from '../pet/PeekPlanner';
@@ -250,6 +250,7 @@ async function main(): Promise<void> {
       run(.14);
     }
   };
+  const cursorAt = (x: number, y: number) => { brain.cursor.x = x; brain.cursor.y = y; };
   const resetScene = () => {
     brain.peek = null;
     brain.looseCover = null;
@@ -356,14 +357,16 @@ async function main(): Promise<void> {
   });
   checkCase('站在窗口上，窗口被猛拖', ['rideFast'], () => {
     run(5);
-    if (!brain.surface) { brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); }
-    dragWindow('chat', -230, 0, 3);
+    // 空闲的几秒里它可能跳到别的窗口上去了：确认站在要拖的那个窗口上
+    if (brain.surface?.windowId !== 'chat') { brain.surface = null; brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); }
+        dragWindow('chat', 200, 0, 2); // 往右猛拖（不要拖出屏幕，否则窗口顶站不住，宠物会先跳下来）
     run(2);
   });
   checkCase('站在窗口上，窗口被来回甩', ['shakenOff'], () => {
     run(5);
-    if (!brain.surface) { brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); }
-    for (let index = 0; index < 8; index++) dragWindow('chat', index % 2 ? -60 : 60, 0, 1);
+    // 空闲的几秒里它可能跳到别的窗口上去了：确认站在要拖的那个窗口上
+    if (brain.surface?.windowId !== 'chat') { brain.surface = null; brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); }
+        for (let index = 0; index < 8; index++) dragWindow('chat', index % 2 ? -60 : 60, 0, 1);
     run(4);
   });
   resetScene();
@@ -385,6 +388,60 @@ async function main(): Promise<void> {
   });
   resetScene();
   brain.performAction = originalPerformAction;
+  write();
+
+  // ---- 场景六：喝水提醒在各种状态下都能正常提醒到你（不会卡住、不会躲在窗口后面提醒） ----
+  write('【喝水提醒】');
+  const styles: ReminderStyle[] = ['lively', 'gentle', 'sign', 'silentSign', 'knock', 'sitOnWindow', 'pushCup'];
+  const startStates: { title: string; setup: () => boolean }[] = [
+    { title: '在空地上', setup: () => true },
+    { title: '躲在窗口后面偷看', setup: () => hideBehindChat() },
+    { title: '原地躲在窗口下面', setup: () => {
+      // 让 VS Code 窗口直接盖在它身上，躲在下面
+      const left = brain.position.x - 200;
+      applyWindows(currentWindows.map(window => window.id === 'code'
+        ? { ...window, bounds: { left, right: left + 700, top: brain.position.y - 300, bottom: brain.position.y + 200 } } : window));
+      run(.1);
+      if (!brain.looseCover) return false;
+      brain.looseCover = { ...brain.looseCover, level: 'hidden', isWaitingForSettle: false, hasSettled: true };
+      brain.setBehavior('hiding', 30);
+      return true;
+    } },
+    { title: '站在窗口顶上', setup: () => { brain.tryJumpOntoWindow(() => brain.setBehavior('sit', 30), 'chat'); run(3); return !!brain.surface; } },
+  ];
+  const bodyExposure = (clip: { left: number; right: number; top: number; bottom: number } | null) => {
+    if (!clip) return 1;
+    const body = { left: brain.position.x - 80, right: brain.position.x + 80, top: brain.position.y - 140, bottom: brain.position.y + 8 };
+    const overlap = Math.max(0, Math.min(body.right, clip.right) - Math.max(body.left, clip.left)) * Math.max(0, Math.min(body.bottom, clip.bottom) - Math.max(body.top, clip.top));
+    return 1 - overlap / (160 * 148);
+  };
+  let reminderFailures = 0;
+  for (const state of startStates) {
+    const lineParts: string[] = [];
+    for (const style of styles) {
+      resetScene();
+      cursorAt(900, 500);
+      if (!state.setup()) { lineParts.push(`${style}⚠没进入状态`); continue; }
+      let bubbleShownAt = -1;
+      let exposureWhenShown = 1;
+      const startedAt = simulatedMs;
+      brain.startRemind({ escalationLevel: style === 'knock' ? 1 : style === 'sitOnWindow' || style === 'pushCup' ? 2 : 0, style, signText: '喝水！', targetWindowId: 'chat',
+        showBubble: () => { bubbleShownAt = simulatedMs; exposureWhenShown = bodyExposure(brain.clipRect); } });
+      for (let wait = 0; wait < 90 && bubbleShownAt < 0; wait++) run(.5);
+      const seconds = (bubbleShownAt - startedAt) / 1000;
+      const isOk = bubbleShownAt >= 0 && exposureWhenShown > .85;
+      if (!isOk) {
+        reminderFailures++;
+        write(`    ✗ 现场：行为 ${brain.behavior}，位置 ${Math.round(brain.position.x)},${Math.round(brain.position.y)}，路径 ${brain.path.length} 点${brain.path.length ? `→${Math.round(brain.path[brain.path.length - 1].x)},${Math.round(brain.path[brain.path.length - 1].y)}` : ''}，躲着 ${!!brain.looseCover}，偷看 ${!!brain.peek}，提醒中 ${brain.isReminding}`);
+      }
+      lineParts.push(`${style}${isOk ? '✓' : '✗'}${bubbleShownAt >= 0 ? `${seconds.toFixed(1)}秒` : '没提醒到'}${exposureWhenShown <= .85 ? `（被挡住${Math.round((1 - exposureWhenShown) * 100)}%）` : ''}`);
+      brain.drinkRecorded(false);
+      run(3);
+    }
+    write(`  ${state.title}：${lineParts.join('  ')}`);
+  }
+  write(`  ${reminderFailures ? `❌ ${reminderFailures} 次没提醒好` : '✅ 全部提醒到了，而且提醒时都没被窗口挡住'}`);
+  resetScene();
   write();
 
   // ---- 场景四：故意把位置弄坏，看能不能自动复位 ----

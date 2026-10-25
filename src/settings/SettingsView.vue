@@ -39,7 +39,7 @@
 
     <!-- 🐱 关于你 -->
     <section>
-      <h2>🐱 关于你</h2>
+      <h2>🙋 关于你</h2>
       <div class="row">
         <label>{{ currentPetName }}怎么称呼你</label>
         <div class="control">
@@ -204,11 +204,12 @@
         <label>声音模式</label>
         <div class="control">
           <select v-model="draft.voiceMode" :disabled="!draft.voiceEnabled">
-            <option value="full">猫叫 + 说话</option>
-            <option value="meowOnly">只有猫叫</option>
+            <option value="full">叫声 + 说话</option>
+            <option value="meowOnly">只有叫声（不说话）</option>
           </select>
         </div>
       </div>
+      <p class="hint">叫声跟着宠物变：{{ currentPetName }}的叫声是"{{ currentSpecies.soundWord }}～"。说话是提前录好的语音，每种宠物各有一套。</p>
       <div class="row">
         <label>音量</label>
         <div class="control">
@@ -222,7 +223,7 @@
     <section>
       <h2>🐾 外观与散步</h2>
       <div class="row">
-        <label>猫咪大小</label>
+        <label>{{ currentPetName }}的大小</label>
         <div class="control segmented">
           <button v-for="size in CAT_SIZES" :key="size" :class="{ selected: draft.catSizePercent === size }"
                   @click="draft.catSizePercent = size">{{ size }}%</button>
@@ -441,7 +442,7 @@ function addCustomReminder(): void {
     repeatIntervalMinutes: 60,
     minutesBeforeWorkEnd: 0,
     title: '',
-    message: '喵～时间到啦！',
+    message: '时间到啦！',
     weekdays: [...(draft.value?.workWeekdays ?? [1, 2, 3, 4, 5])],
     voiceLineId: null,
   });

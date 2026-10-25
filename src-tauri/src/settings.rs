@@ -103,7 +103,7 @@ impl Default for CustomReminder {
             repeat_interval_minutes: 60,
             minutes_before_work_end: 0,
             title: "提醒".into(),
-            message: "喵～时间到啦！".into(),
+            message: "时间到啦！".into(),
             weekdays: vec![1, 2, 3, 4, 5],
             voice_line_id: None,
         }
