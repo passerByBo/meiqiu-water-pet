@@ -19,4 +19,6 @@ export interface PetModel {
   setSignText(text: string): void;
   /** 穿上装扮（none 或装扮 id） */
   setAccessory(id: string): void;
+  /** 换掉这只宠物时调用（AI 模型是异步加载的，要告诉它别再挂上去了） */
+  dispose?(): void;
 }

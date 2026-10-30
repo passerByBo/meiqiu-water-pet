@@ -4,8 +4,8 @@ import * as THREE from 'three';
 import { clamp, damp, pickRandom, randomBetween } from '../shared/geometry';
 import type { PetSkin } from './skins';
 
-/** 关键姿势：每个姿势定义各关节角度，实际姿势是它们的加权混合 */
-const KEY_POSES = {
+/** 关键姿势：每个姿势定义各关节角度，实际姿势是它们的加权混合（AI 模型 GltfQuadrupedModel 也用这套数值） */
+export const KEY_POSES = {
   stand:   { hipsHeight: .37, hipsPitch: 0,    hipsShift: 0,    frontUpper: 0,    frontKnee: 0,   backUpper: 0,    backKnee: 0,   neckPitch: 0 },
   sit:     { hipsHeight: .15, hipsPitch: -.55, hipsShift: -.08, frontUpper: .45,  frontKnee: .05, backUpper: -.5,  backKnee: 2.4, neckPitch: .45 },
   lie:     { hipsHeight: .2,  hipsPitch: .04,  hipsShift: 0,    frontUpper: -1.45, frontKnee: .25, backUpper: -1.2, backKnee: 2.5, neckPitch: .2 },

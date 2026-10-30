@@ -59,6 +59,7 @@ export class PetScene {
   setSpecies(species: PetSpecies, skinId = DEFAULT_SKIN_ID): PetModel {
     if (species === this.species && skinId === this.skinId) return this.petModel;
     this.scene.remove(this.petModel.root);
+    this.petModel.dispose?.();
     disposeObject(this.petModel.root);
     this.species = species;
     this.skinId = skinId;

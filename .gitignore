@@ -14,3 +14,6 @@ release/
 .idea/
 Thumbs.db
 *.log
+
+# Blender 保存时自动生成的备份文件
+*.blend1

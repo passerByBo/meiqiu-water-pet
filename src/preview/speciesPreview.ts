@@ -12,7 +12,7 @@ import { SKINS } from '../pet/skins';
 import type { PetSpecies } from '../pet/species';
 import { createPetModel } from '../pet/speciesModels';
 
-// 网址参数：?only=1 只看第 2 种动物；?cell=360 把格子放大（检查细节用）
+// 网址参数：?only=1 只看第 2 种动物；?cell=360 把格子放大（检查细节用）；?skin=ai-black 换成指定皮肤
 const searchParams = new URLSearchParams(window.location.search);
 const CELL_SIZE = Number(searchParams.get('cell')) || 200;
 const GAP = 8;
@@ -66,7 +66,10 @@ const ALL_SPECIES: Species[] = [
 
 const onlyIndex = searchParams.get('only');
 const isSkinMode = searchParams.get('skins') === '1';
-const CHOSEN_SPECIES = onlyIndex === null ? ALL_SPECIES : [ALL_SPECIES[Number(onlyIndex)]];
+// ?only=0&skin=ai-black：用指定皮肤看全部姿势（检查 AI 模型用）
+const chosenSkinId = searchParams.get('skin');
+const CHOSEN_SPECIES = (onlyIndex === null ? ALL_SPECIES : [ALL_SPECIES[Number(onlyIndex)]])
+  .map(species => chosenSkinId ? { ...species, create: () => createPetModel(species.id, chosenSkinId) } : species);
 // 换肤模式：每套皮肤展开成一行（名字只留图标 + 皮肤名）
 const SPECIES: Species[] = isSkinMode
   ? CHOSEN_SPECIES.flatMap(species => SKINS[species.id].map(skin => ({

@@ -19,6 +19,12 @@ export interface PetSkin {
   eyes?: Partial<EyePalette>;
   /** 黑猫：虹膜从上到下的三段颜色 */
   catIris?: [string, string, string];
+  /**
+   * 用 AI 生成的 3D 模型文件代替代码搭的模型（文件放在 public/ 下，制作流程见 docs/3D模型制作流程.md）。
+   * scale：放大倍数，让它和代码版的宠物差不多大；sheenColor：毛绒边缘绒光的颜色（浅色、暖色毛要配暖色）；
+   * tailLiftScale：尾巴跟着抬起 / 放下的程度（卷在背上的尾巴设小）
+   */
+  model?: { file: string; scale: number; sheenColor?: number; tailLiftScale?: number };
 }
 
 export const DEFAULT_SKIN_ID = 'default';
@@ -41,6 +47,8 @@ export const SKINS: Record<PetSpecies, PetSkin[]> = {
       colors: { fur: 0x7a8494, outline: 0x1e222a, rim: 0xe0e8ff, collar: 0xf08a2e, whisker: 0xe8ecf4 },
       catIris: ['#7a3a08', '#e8862a', '#ffd28a'],
     },
+    // AI 生成的写实一点的 Q 版黑猫（Tripo 生成 + Blender 绑骨）：眼睛不会眨、没有项圈和装扮
+    { id: 'ai-black', name: 'AI 黑猫', icon: '✨', swatch: ['#1c1a22', '#c8e030'], model: { file: 'models/black_cat.glb', scale: 2 } },
   ],
   hamster: [
     { id: DEFAULT_SKIN_ID, name: '奶黄', icon: '🟡', swatch: ['#ecbf86', '#fff8ee'] },
@@ -73,6 +81,8 @@ export const SKINS: Record<PetSpecies, PetSkin[]> = {
       id: 'sesame', name: '胡麻柴', icon: '🟤', swatch: ['#9a6a45', '#3a8f7a'],
       colors: { fur: 0x9c6a44, outline: 0x2a170c, collar: 0x3a8f7a },
     },
+    // AI 生成的毛绒柴犬（Tripo 生成 + Blender 绑骨）：眼睛不会眨、没有项圈和装扮，作揖等特有动作暂不支持
+    { id: 'ai-shiba', name: 'AI 柴犬', icon: '✨', swatch: ['#d6843a', '#f6e2c4'], model: { file: 'models/shiba.glb', scale: 2, sheenColor: 0x8a6a4c, tailLiftScale: .2 } },
   ],
   goldfish: [
     { id: DEFAULT_SKIN_ID, name: '熊猫狮头', icon: '⚫', swatch: ['#1b1b25', '#fff4ea'] },
@@ -92,6 +102,8 @@ export const SKINS: Record<PetSpecies, PetSkin[]> = {
       colors: { body: 0x4a5a8a, scale: 0x56679c, head: 0xe2e8f6, wen: 0xeef2fc, outline: 0x10142a, rim: 0xc8dcff, scaleOutline: 0x1a2040, scaleRim: 0xd8e6ff,
         finRoot: 0x3a4a7a, finMiddle: 0x4a5c90, finTip: 0x9fb4e0, finRay: 0xc8d6f4 },
     },
+    // AI 生成的黑白狮头金鱼（Tripo 生成 + Blender 绑骨）：不会眨眼、张嘴、吐泡泡，没有装扮
+    { id: 'ai-oranda', name: 'AI 金鱼', icon: '✨', swatch: ['#1c1c24', '#f4f0ea'], model: { file: 'models/goldfish.glb', scale: 2, sheenColor: 0x9a9aa4 } },
   ],
 };
 
